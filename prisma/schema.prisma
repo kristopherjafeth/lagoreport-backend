@@ -1,0 +1,227 @@
+// This is your Prisma schema file,
+// learn more about it in the docs https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Greenhouse {
+  id             Int            @id @default(autoincrement())
+  name           String
+  country        String
+  website        String
+  phone          String
+  cif            String
+  profileImage   String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  temperatures   Temperature[]
+  humidities     Humidity[]
+  brightnesses   Brightness[]
+  soilHumidities SoilHumidity[]
+  co2            Co2[]
+  fan1           Fan1[]
+  lamp1          Lamp1[]
+  pump1          Pump1[]
+  heater1        Heater1[]
+  ph             ph[]
+  luminosity     Luminosity[]
+  moi            Moi[]
+  rs_med         Rs_med[]
+  volts          Volts[]
+}
+
+model Temperature {
+  id           Int        @id @default(autoincrement())
+  value        Float
+  timestamp    DateTime   @default(now())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  greenhouseId Int
+  greenhouse   Greenhouse @relation(fields: [greenhouseId], references: [id])
+}
+
+model Humidity {
+  id           Int        @id @default(autoincrement())
+  value        Float
+  timestamp    DateTime   @default(now())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  greenhouseId Int
+  greenhouse   Greenhouse @relation(fields: [greenhouseId], references: [id])
+}
+
+model Brightness {
+  id           Int        @id @default(autoincrement())
+  value        Float
+  timestamp    DateTime   @default(now())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  greenhouseId Int
+  greenhouse   Greenhouse @relation(fields: [greenhouseId], references: [id])
+}
+
+model SoilHumidity {
+  id           Int        @id @default(autoincrement())
+  value        Float
+  timestamp    DateTime   @default(now())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  greenhouseId Int
+  greenhouse   Greenhouse @relation(fields: [greenhouseId], references: [id])
+}
+
+model Co2 {
+  id           Int        @id @default(autoincrement())
+  value        Float
+  timestamp    DateTime   @default(now())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  greenhouseId Int
+  greenhouse   Greenhouse @relation(fields: [greenhouseId], references: [id])
+}
+
+model Fan1 {
+  id           Int        @id @default(autoincrement())
+  value        Float
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  greenhouseId Int
+  greenhouse   Greenhouse @relation(fields: [greenhouseId], references: [id])
+}
+
+model Pump1 {
+  id           Int        @id @default(autoincrement())
+  value        Float
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  greenhouseId Int
+  greenhouse   Greenhouse @relation(fields: [greenhouseId], references: [id])
+}
+
+model Heater1 {
+  id           Int        @id @default(autoincrement())
+  value        Float
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  greenhouseId Int
+  greenhouse   Greenhouse @relation(fields: [greenhouseId], references: [id])
+}
+
+model ph {
+  id           Int        @id @default(autoincrement())
+  value        Float
+  timestamp    DateTime   @default(now())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  greenhouseId Int
+  greenhouse   Greenhouse @relation(fields: [greenhouseId], references: [id])
+}
+
+model Luminosity {
+  id           Int        @id @default(autoincrement())
+  value        Float
+  timestamp    DateTime   @default(now())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  greenhouseId Int
+  greenhouse   Greenhouse @relation(fields: [greenhouseId], references: [id])
+}
+
+model Moi {
+  id           Int        @id @default(autoincrement())
+  value        Float
+  timestamp    DateTime   @default(now())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  greenhouseId Int
+  greenhouse   Greenhouse @relation(fields: [greenhouseId], references: [id])
+}
+
+model Rs_med {
+  id           Int        @id @default(autoincrement())
+  value        Float
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  greenhouseId Int
+  greenhouse   Greenhouse @relation(fields: [greenhouseId], references: [id])
+}
+
+
+
+model Volts {
+  id           Int        @id @default(autoincrement())
+  value        Float
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  greenhouseId Int
+  greenhouse   Greenhouse @relation(fields: [greenhouseId], references: [id])
+}
+
+
+model Plan {
+  id           Int       @id @default(autoincrement())
+  name         String
+  slug         String    @unique
+  price        Decimal   @db.Decimal(10, 2)
+  period       String
+  description  String
+  features     Json
+  icon         String
+  active       Boolean   @default(true)
+  subscribers  Int       @default(0)
+  revenue      Decimal   @default(0) @db.Decimal(12, 2)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  firstName String
+  lastName  String
+  role      String   @default("user")
+  plan      String   @default("Básico")
+  status    String   @default("active")
+  devices   Int      @default(0)
+  lastLogin DateTime?
+  avatarUrl String?
+  phoneNumber String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  twoFactorCodes TwoFactorCode[]
+}
+
+model Lamp1 {
+  id           Int        @id @default(autoincrement())
+  value        Float
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  greenhouseId Int
+  greenhouse   Greenhouse @relation(fields: [greenhouseId], references: [id])
+}
+
+/// Codes temporales para verificación en dos pasos
+model TwoFactorCode {
+  id        Int      @id @default(autoincrement())
+  codeHash  String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+
+  @@index([userId])
+  @@index([expiresAt])
+}
