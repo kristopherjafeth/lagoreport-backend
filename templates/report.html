@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Reporte diario del capitán</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      @page {
+        size: 8.5in 11in;
+        margin: 10mm;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: auto;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;
+        color: #0f172a;
+        background: #ffffff;
+        display: flex;
+        justify-content: center;
+      }
+
+      .sheet {
+        width: calc(8.5in - 20mm);
+        min-height: calc(11in - 20mm);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .header {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        border-bottom: 2px solid #1f2937;
+        padding-bottom: 8px;
+      }
+
+      .logo {
+        width: 140px;
+        flex-shrink: 0;
+      }
+
+      .logo img {
+        width: 100%;
+        height: auto;
+        object-fit: contain;
+      }
+
+      .company-info {
+        font-size: 8.5px;
+        line-height: 1.35;
+        color: #1f2937;
+      }
+
+      .company-info strong {
+        font-size: 10.5px;
+        letter-spacing: 0.02em;
+      }
+
+      .report-title {
+        text-align: center;
+        font-size: 14px;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin: 4px 0 2px;
+      }
+
+      .info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 4px;
+      }
+
+      .info-cell {
+        border: 1px solid #0f172a;
+        padding: 4px 5px;
+        min-height: 38px;
+      }
+
+      .info-cell span {
+        display: block;
+        font-size: 7.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: #1f2937;
+        margin-bottom: 4px;
+      }
+
+      .info-cell strong {
+        display: block;
+        font-size: 10px;
+        font-weight: 600;
+        color: #111827;
+        text-transform: uppercase;
+      }
+
+      .info-cell em {
+        display: block;
+        font-size: 9px;
+        color: #475569;
+        text-transform: uppercase;
+        margin-top: 2px;
+      }
+
+      .table-activities {
+        width: 100%;
+      }
+
+      .table-activities table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .table-activities th,
+      .table-activities td {
+        border: 1px solid #0f172a;
+        padding: 3px 5px;
+        font-size: 8.5px;
+        vertical-align: top;
+      }
+
+      .table-activities th {
+        background-color: #1e293b;
+        color: #ffffff;
+        text-transform: uppercase;
+        text-align: center;
+        letter-spacing: 0.03em;
+      }
+
+      .table-activities td:nth-child(1),
+      .table-activities td:nth-child(2) {
+        text-align: center;
+        width: 15%;
+        white-space: nowrap;
+      }
+
+      .table-activities td:nth-child(3) {
+        width: 70%;
+      }
+
+      .table-activities td {
+        color: #111827;
+        line-height: 1.4;
+      }
+
+      .table-activities tr.empty-row td {
+        height: 10px;
+      }
+
+      .notes-section {
+        display: grid;
+        grid-template-columns: 0.4fr 0.6fr;
+        gap: 6px;
+        margin-top: 8px;
+        page-break-inside: avoid;
+      }
+
+      .notes-section .total,
+      .notes-section .observations {
+        border: 1px solid #0f172a;
+        padding: 6px;
+        min-height: 56px;
+      }
+
+      .notes-section span.label {
+        display: block;
+        font-size: 7.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: #1f2937;
+        margin-bottom: 4px;
+      }
+
+      .notes-section .total strong {
+        display: block;
+        font-size: 11px;
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      .notes-section .range {
+        font-size: 8.5px;
+        color: #475569;
+        margin-top: 4px;
+      }
+
+      .notes-section .observations div {
+        font-size: 8.5px;
+        color: #111827;
+        line-height: 1.35;
+        min-height: 46px;
+      }
+
+      .crew-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 4px;
+        margin-top: 8px;
+        page-break-inside: avoid;
+      }
+
+      .crew-grid .cell,
+      .signatures .cell {
+        border: 1px solid #0f172a;
+        padding: 6px;
+        min-height: 34px;
+      }
+
+      .crew-grid span.label,
+      .signatures span.label {
+        display: block;
+        font-size: 7.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: #1f2937;
+        margin-bottom: 4px;
+      }
+
+      .crew-grid div.value,
+      .signatures div.value {
+        font-size: 9px;
+        color: #111827;
+        text-transform: uppercase;
+      }
+
+      .signatures {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px;
+        margin-top: 10px;
+        page-break-inside: avoid;
+      }
+
+      .signatures .cell {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        gap: 4px;
+      }
+
+      .signatures-extra {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 4px;
+        margin-top: 8px;
+        page-break-inside: avoid;
+      }
+
+      .signatures-extra .cell {
+        border: 1px solid #0f172a;
+        padding: 6px;
+        min-height: 44px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+      }
+
+      .signatures-extra span.label {
+        font-size: 7.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: #1f2937;
+      }
+
+      .signatures-extra .value {
+        margin-top: 4px;
+        font-size: 8.5px;
+        color: #111827;
+        text-transform: uppercase;
+      }
+
+      .signature-space {
+        flex: 0 0 auto;
+        height: 100px;
+        width: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+      }
+
+      .signature-space img {
+        max-height: 100%;
+        max-width: 100%;
+        object-fit: contain;
+      }
+
+      .signatures .line,
+      .signatures-extra .line {
+        margin-top: 6px;
+        border-top: 1px solid #0f172a;
+        height: 1px;
+      }
+
+      .signatures-extra .line {
+        margin-top: 8px;
+      }
+
+      footer {
+        margin-top: 6px;
+        font-size: 8.5px;
+        color: #475569;
+        text-align: right;
+        page-break-inside: avoid;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <div class="header">
+        {{#if logoDataUri}}
+        <div class="logo">
+          <img src="{{logoDataUri}}" alt="Logo" />
+        </div>
+        {{/if}}
+        <div class="company-info">
+          <strong>SERVICIOS NAVALES VENEZOLANOS, C.A.</strong><br />
+          AV. 17, EDIF. VAROCA, PISO 1, LOCAL 110-201, SECTOR LOS HATICOS<br />
+          MARACAIBO, EDO. ZULIA, VENEZUELA. TELF.: (0261) 765-19.38<br />
+          RIF: J-30939047-0 &nbsp;|&nbsp; EMAIL: snv2516@hotmail.com
+        </div>
+      </div>
+
+      <div class="report-title">
+        Reporte Diario del Capitán Nº {{reportNumber}}
+      </div>
+
+      <div class="info-grid">
+        <div class="info-cell">
+          <span>Embarcación</span>
+          <strong>{{vesselName}}</strong>
+        </div>
+        <div class="info-cell">
+          <span>Su capitán</span>
+          <strong>{{captainName}}</strong>
+        </div>
+        <div class="info-cell">
+          <span>Cliente</span>
+          <strong>{{clientName}}</strong>
+        </div>
+        <div class="info-cell">
+          <span>Fecha del servicio</span>
+          <strong>{{serviceDateLabel}}</strong>
+          {{#if serviceDayLabel}}<em>{{serviceDayLabel}}</em>{{/if}}
+        </div>
+      </div>
+
+      <div class="table-activities">
+        <table>
+          <thead>
+            <tr>
+              <th>Empezó<br />(Horas)</th>
+              <th>Terminó<br />(Horas)</th>
+              <th>Descripción de la actividad</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#each activities}}
+            <tr>
+              <td>{{startTime}}</td>
+              <td>{{endTime}}</td>
+              <td>{{{descriptionHtml}}}</td>
+            </tr>
+            {{/each}} {{#each emptyRows}}
+            <tr class="empty-row">
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="notes-section">
+        <div class="total">
+          <span class="label">Total horas de servicio</span>
+          <strong>{{totalServiceLabel}}</strong>
+          {{#if serviceRangeLabel}}
+          <div class="range">Horario: {{serviceRangeLabel}}</div>
+          {{/if}}
+        </div>
+        <div class="observations">
+          <span class="label">Observaciones / Notas</span>
+          <div>{{{notesHtml}}}</div>
+        </div>
+      </div>
+
+      <div class="crew-grid">
+        <div class="cell">
+          <span class="label">Patrón</span>
+          <div class="value">{{patronName}}</div>
+        </div>
+        <div class="cell">
+          <span class="label">Motorista</span>
+          <div class="value">{{motoristaName}}</div>
+        </div>
+        <div class="cell">
+          <span class="label">Marino cocinero</span>
+          <div class="value">{{cookName}}</div>
+        </div>
+        <div class="cell">
+          <span class="label">Marino</span>
+          <div class="value">{{sailorName}}</div>
+        </div>
+      </div>
+
+
+      <div class="signatures-extra">
+        <div class="cell">
+          <span class="label">Supervisor autorizado (cliente)</span>
+          <div class="line"></div>
+          {{#if clientSupervisorName}}
+          <div class="value">{{clientSupervisorName}}</div>
+          {{/if}}
+        </div>
+        <div class="cell">
+          <span class="label">Firma de Capitán</span>
+          <div class="signature-space">
+            {{#if captainSignatureDataUri}}
+            <img
+              src="{{captainSignatureDataUri}}"
+              alt="Firma del capitán"
+              height="100"
+              width="200"
+            />
+            {{/if}}
+          </div>
+          <div class="line"></div>
+          {{#if captainName}}
+          <div class="value">{{captainName}}</div>
+          {{/if}}
+        </div>
+        <div class="cell">
+          <span class="label">Firma de Aprobado</span>
+          <div class="line"></div>
+          {{#if companySupervisorName}}
+          <div class="value">{{companySupervisorName}}</div>
+          {{/if}}
+        </div>
+      </div>
+
+      <footer>Generado el {{generatedAtLabel}}</footer>
+    </div>
+  </body>
+</html>

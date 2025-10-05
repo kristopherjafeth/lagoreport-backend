@@ -13,6 +13,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ReportStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model Greenhouse {
   id             Int            @id @default(autoincrement())
   name           String
@@ -185,21 +191,63 @@ model Plan {
 
 
 
+model Vessel {
+  id           Int       @id @default(autoincrement())
+  name         String
+  registration String?   @unique
+  vesselType   String?
+  flag         String?
+  owner        String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  reports      Report[]
+}
+
+
+
+model Captain {
+  id           Int       @id @default(autoincrement())
+  name         String
+  cedula       String    @unique
+  phone        String?
+  photoUrl     String?
+  signatureUrl String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  reports      Report[]
+}
+
+
+model Customer {
+  id           Int       @id @default(autoincrement())
+  name         String
+  cedula       String    @unique
+  phone        String?
+  photoUrl     String?
+  signatureUrl String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  reports      Report[]
+}
+
+
+
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String
-  firstName String
-  lastName  String
-  role      String   @default("user")
-  plan      String   @default("Básico")
-  status    String   @default("active")
-  devices   Int      @default(0)
-  lastLogin DateTime?
-  avatarUrl String?
-  phoneNumber String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  password     String
+  firstName    String
+  lastName     String
+  role         String   @default("user")
+  plan         String   @default("Básico")
+  status       String   @default("active")
+  devices      Int      @default(0)
+  lastLogin    DateTime?
+  avatarUrl    String?
+  phoneNumber  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
   twoFactorCodes TwoFactorCode[]
 }
 
@@ -224,4 +272,55 @@ model TwoFactorCode {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model Report {
+  id                  Int    @id @default(autoincrement())
+  vesselId            Int?
+  vesselName          String
+  captainName         String
+  captainId           Int?
+  serviceDate         DateTime
+  serviceStart        DateTime
+  serviceEnd          DateTime
+  clientName          String
+  customerId          Int?
+  patronName          String
+  motoristaName       String
+  cookName            String
+  sailorName          String
+  companySupervisorName String?
+  clientSupervisorName  String?
+  latitude            Float?
+  longitude           Float?
+  totalServiceMinutes Int    @default(0)
+  status              ReportStatus @default(PENDING)
+  supportImageUrl     String?
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  activities          ReportActivity[]
+  captain             Captain? @relation(fields: [captainId], references: [id])
+  customer            Customer? @relation(fields: [customerId], references: [id])
+  vessel              Vessel? @relation(fields: [vesselId], references: [id])
+
+  @@index([vesselName])
+  @@index([serviceDate])
+  @@index([vesselId])
+}
+
+model ReportActivity {
+  id          Int      @id @default(autoincrement())
+  reportId    Int
+  description String
+  startedAt   DateTime
+  endedAt     DateTime
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@index([startedAt])
 }

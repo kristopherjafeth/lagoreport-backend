@@ -8,6 +8,10 @@ import authRoutes from './routes/auth.routes.js';
 import plansRoutes from './routes/plans.routes.js';
 import usersRoutes from './routes/users.routes.js';
 import commandsRoutes from './routes/commands.routes.js';
+import reportsRoutes from './routes/reports.routes.js';
+import captainsRoutes from './routes/captains.routes.js';
+import customersRoutes from './routes/customers.routes.js';
+import vesselsRoutes from './routes/vessels.routes.js';
 
 const app = express();
 
@@ -21,9 +25,15 @@ app.use('/api/auth', authRoutes);
 app.use('/api/plans', plansRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/commands', commandsRoutes);
+app.use('/api/reports', reportsRoutes);
+app.use('/api/captains', captainsRoutes);
+app.use('/api/customers', customersRoutes);
+app.use('/api/vessels', vesselsRoutes);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 app.use(express.static(path.join(__dirname, 'build')));
 

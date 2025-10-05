@@ -1,5 +1,5 @@
 {
-  "name": "greenhouse-iot-backend",
+  "name": "lagoreport-backend",
   "version": "1.0.0",
   "main": "index.js",
   "type": "module",
@@ -23,6 +23,9 @@
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^7.0.6"
+    "multer": "^2.0.0",
+    "nodemailer": "^7.0.6",
+    "handlebars": "^4.7.8",
+    "puppeteer": "^22.12.1"
   }
 }
