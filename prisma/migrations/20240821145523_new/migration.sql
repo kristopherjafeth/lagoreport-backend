@@ -5,7 +5,7 @@
 
 */
 -- DropForeignKey
-ALTER TABLE `fanactuator1` DROP FOREIGN KEY `Fanactuator1_greenhouseId_fkey`;
+ALTER TABLE `Fanactuator1` DROP FOREIGN KEY `Fanactuator1_greenhouseId_fkey`;
 
 -- DropTable
-DROP TABLE `fanactuator1`;
+DROP TABLE `Fanactuator1`;
