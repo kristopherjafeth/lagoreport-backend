@@ -22,8 +22,8 @@ export function getMailer() {
 
 function buildTwoFactorTemplate(code) {
   const expiresMinutes = 5;
-  const brand = process.env.MAIL_BRAND_NAME || 'BloomIoT';
-  const supportEmail = process.env.SUPPORT_EMAIL || 'support@example.com';
+  const brand = process.env.MAIL_BRAND_NAME || 'LagoReport';
+  const supportEmail = process.env.SUPPORT_EMAIL || 'soporte@lagoreport.com';
   const primaryColor = '#16a34a';
   const fontFamily = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,'Open Sans','Helvetica Neue',sans-serif";
   const html = `<!DOCTYPE html>
