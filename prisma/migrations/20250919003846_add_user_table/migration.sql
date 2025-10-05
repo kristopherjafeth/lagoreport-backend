@@ -1,14 +1,14 @@
 /*
   Warnings:
 
-  - You are about to drop the `conc` table. If the table is not empty, all the data it contains will be lost.
+  - You are about to drop the `Conc` table. If the table is not empty, all the data it contains will be lost.
 
 */
 -- DropForeignKey
-ALTER TABLE `conc` DROP FOREIGN KEY `Conc_greenhouseId_fkey`;
+ALTER TABLE `Conc` DROP FOREIGN KEY `Conc_greenhouseId_fkey`;
 
 -- DropTable
-DROP TABLE `conc`;
+DROP TABLE `Conc`;
 
 -- CreateTable
 CREATE TABLE `User` (
