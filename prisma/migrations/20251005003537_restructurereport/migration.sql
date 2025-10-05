@@ -1,5 +1,5 @@
 -- AlterTable
-ALTER TABLE `report` ALTER COLUMN `updatedAt` DROP DEFAULT;
+ALTER TABLE `Report` ALTER COLUMN `updatedAt` DROP DEFAULT;
 
 -- AlterTable
-ALTER TABLE `reportactivity` ALTER COLUMN `updatedAt` DROP DEFAULT;
+ALTER TABLE `Reportactivity` ALTER COLUMN `updatedAt` DROP DEFAULT;

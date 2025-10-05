@@ -40,7 +40,7 @@ CREATE INDEX `Report_serviceDate_idx` ON `Report`(`serviceDate`);
 CREATE INDEX `ReportActivity_reportId_idx` ON `ReportActivity`(`reportId`);
 CREATE INDEX `ReportActivity_startedAt_idx` ON `ReportActivity`(`startedAt`);
 
-ALTER TABLE `ReportActivity`
+ALTER TABLE `Reportactivity`
   ADD CONSTRAINT `ReportActivity_reportId_fkey`
   FOREIGN KEY (`reportId`) REFERENCES `Report`(`id`)
   ON DELETE CASCADE ON UPDATE CASCADE;
