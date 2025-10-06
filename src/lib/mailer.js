@@ -24,7 +24,7 @@ function buildTwoFactorTemplate(code) {
   const expiresMinutes = 5;
   const brand = process.env.MAIL_BRAND_NAME || 'LagoReport';
   const supportEmail = process.env.SUPPORT_EMAIL || 'soporte@lagoreport.com';
-  const primaryColor = '#16a34a';
+  const primaryColor = '#0087ff';
   const fontFamily = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,'Open Sans','Helvetica Neue',sans-serif";
   const html = `<!DOCTYPE html>
   <html lang="es">
@@ -44,10 +44,10 @@ function buildTwoFactorTemplate(code) {
       .divider { height:1px;background:#e5e7eb;margin:32px 0; }
       .btn { display:inline-block;padding:12px 20px;border-radius:8px;background:${primaryColor};color:#ffffff;font-weight:600;font-size:14px;letter-spacing:0.5px; }
       @media (prefers-color-scheme: dark) {
-        .container { background:#1f2937;border-color:#374151; }
-        h1 { color:#f9fafb; }
-        p { color:#d1d5db; }
-        .footer { color:#9ca3af; }
+        .container { background:#fff;border-color:#374151; }
+        h1 { color:#000; }
+        p { color:#333; }
+        .footer { color:#fff; }
       }
     </style>
   </head>
