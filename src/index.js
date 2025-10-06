@@ -12,6 +12,7 @@ import reportsRoutes from './routes/reports.routes.js';
 import captainsRoutes from './routes/captains.routes.js';
 import customersRoutes from './routes/customers.routes.js';
 import vesselsRoutes from './routes/vessels.routes.js';
+import rolesRoutes from './routes/roles.routes.js';
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use(cors());
 app.use('/api', greenhousesRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/plans', plansRoutes);
+app.use('/api/roles', rolesRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/commands', commandsRoutes);
 app.use('/api/reports', reportsRoutes);

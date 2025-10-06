@@ -233,13 +233,28 @@ model Customer {
 
 
 
+model Role {
+  id          Int      @id @default(autoincrement())
+  name        String
+  slug        String   @unique
+  description String?
+  permissions Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+
+  @@unique([name])
+}
+
+
 model User {
   id           Int      @id @default(autoincrement())
   email        String   @unique
   password     String
   firstName    String
   lastName     String
-  role         String   @default("user")
+  roleKey      String   @default("user") @map("role")
+  role         Role     @relation(fields: [roleKey], references: [slug], onUpdate: Cascade)
   plan         String   @default("Básico")
   status       String   @default("active")
   devices      Int      @default(0)

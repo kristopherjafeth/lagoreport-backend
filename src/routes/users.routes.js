@@ -8,7 +8,39 @@ const prisma = new PrismaClient();
 const SALT_ROUNDS = 10;
 
 const allowedStatuses = new Set(["active", "inactive", "suspended"]);
-const allowedRoles = new Set(["admin", "moderator", "user"]);
+const DEFAULT_ROLE_SLUG = "user";
+
+const normalizeRoleSlug = (value) => {
+  if (value === undefined || value === null) return null;
+  return `${value}`
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]+/g, "");
+};
+
+const fetchRoleOrThrow = async (slug, { allowNull = false } = {}) => {
+  const normalized = normalizeRoleSlug(slug);
+
+  if (!normalized) {
+    if (allowNull) {
+      return null;
+    }
+    const fallback = await prisma.role.findUnique({ where: { slug: DEFAULT_ROLE_SLUG } });
+    if (!fallback) {
+      throw new Error("Default role is not configured");
+    }
+    return fallback;
+  }
+
+  const role = await prisma.role.findUnique({ where: { slug: normalized } });
+  if (!role) {
+    const error = new Error(`Role '${normalized}' not found`);
+    error.code = "ROLE_NOT_FOUND";
+    throw error;
+  }
+  return role;
+};
 
 const mapUser = (user) => ({
   id: user.id,
@@ -16,7 +48,15 @@ const mapUser = (user) => ({
   lastName: user.lastName,
   name: `${user.firstName} ${user.lastName}`.trim(),
   email: user.email,
-  role: user.role,
+  role: user.role?.slug ?? user.roleKey ?? DEFAULT_ROLE_SLUG,
+  roleId: user.role?.id ?? null,
+  roleName: user.role?.name ?? null,
+  roleDescription: user.role?.description ?? null,
+  rolePermissions: Array.isArray(user.role?.permissions)
+    ? user.role.permissions
+    : user.role?.permissions && typeof user.role.permissions === "object"
+    ? Object.values(user.role.permissions)
+    : [],
   plan: user.plan,
   status: user.status,
   devices: user.devices,
@@ -50,12 +90,6 @@ const parseDate = (value) => {
   return date;
 };
 
-const normalizeRole = (value, fallback = "user") => {
-  if (!value) return fallback;
-  const normalized = `${value}`.toLowerCase().trim();
-  return allowedRoles.has(normalized) ? normalized : fallback;
-};
-
 const normalizeStatus = (value, fallback = "active") => {
   if (!value) return fallback;
   const normalized = `${value}`.toLowerCase().trim();
@@ -84,7 +118,10 @@ router.get("/", async (req, res) => {
     }
 
     if (role && role !== "all") {
-      where.role = normalizeRole(role);
+      const normalizedRole = normalizeRoleSlug(role);
+      if (normalizedRole) {
+        where.roleKey = normalizedRole;
+      }
     }
 
     if (status && status !== "all") {
@@ -94,6 +131,7 @@ router.get("/", async (req, res) => {
     const users = await prisma.user.findMany({
       where,
       orderBy: { createdAt: "desc" },
+      include: { role: true },
     });
 
     res.json(users.map(mapUser));
@@ -110,7 +148,7 @@ router.get("/:id", async (req, res) => {
   }
 
   try {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await prisma.user.findUnique({ where: { id: userId }, include: { role: true } });
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
@@ -169,20 +207,31 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: parseError.message });
     }
 
+    let roleRecord;
+    try {
+      roleRecord = await fetchRoleOrThrow(role);
+    } catch (roleError) {
+      const statusCode = roleError.code === "ROLE_NOT_FOUND" ? 400 : 500;
+      return res.status(statusCode).json({ error: roleError.message });
+    }
+
     const newUser = await prisma.user.create({
       data: {
         firstName: `${firstName}`.trim(),
         lastName: `${lastName}`.trim(),
         email: normalizedEmail,
         password: hashedPassword,
-        role: normalizeRole(role),
         plan: sanitizePlan(plan),
         status: normalizeStatus(status),
         devices: devicesValue,
         lastLogin: lastLoginDate,
         avatarUrl: avatar ? `${avatar}`.trim() : null,
         phoneNumber: phoneNumber ? `${phoneNumber}`.trim() || null : null,
+        role: {
+          connect: { slug: roleRecord.slug },
+        },
       },
+      include: { role: true },
     });
 
     res.status(201).json(mapUser(newUser));
@@ -199,7 +248,7 @@ router.put("/:id", async (req, res) => {
   }
 
   try {
-    const existing = await prisma.user.findUnique({ where: { id: userId } });
+  const existing = await prisma.user.findUnique({ where: { id: userId }, include: { role: true } });
     if (!existing) {
       return res.status(404).json({ error: "User not found" });
     }
@@ -252,7 +301,15 @@ router.put("/:id", async (req, res) => {
     }
 
     if (role !== undefined) {
-      data.role = normalizeRole(role, existing.role);
+      try {
+        const roleRecord = await fetchRoleOrThrow(role);
+        data.role = {
+          connect: { slug: roleRecord.slug },
+        };
+      } catch (roleError) {
+        const statusCode = roleError.code === "ROLE_NOT_FOUND" ? 400 : 500;
+        return res.status(statusCode).json({ error: roleError.message });
+      }
     }
 
     if (plan !== undefined) {
@@ -292,7 +349,7 @@ router.put("/:id", async (req, res) => {
       data.phoneNumber = normalizedPhone.length ? normalizedPhone : null;
     }
 
-    const updated = await prisma.user.update({ where: { id: userId }, data });
+  const updated = await prisma.user.update({ where: { id: userId }, data, include: { role: true } });
     res.json(mapUser(updated));
   } catch (error) {
     console.error("Error updating user:", error);
