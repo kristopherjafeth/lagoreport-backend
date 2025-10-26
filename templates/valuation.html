@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Valuación {{valuation.code}}</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        margin: 0;
+        padding: 24px;
+        color: #1f2937;
+        font-size: 11px;
+        line-height: 1.4;
+        background-color: #ffffff;
+      }
+
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
+        margin: 0;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid #2563eb;
+      }
+
+      .brand {
+        flex: 1;
+      }
+
+      .brand-logo {
+        margin-bottom: 8px;
+      }
+
+      .brand-logo img {
+        max-height: 68px;
+        height: auto;
+        width: auto;
+      }
+
+      .brand h1 {
+        font-size: 18px;
+        color: #1d4ed8;
+        margin-bottom: 4px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .brand p {
+        margin: 2px 0;
+      }
+
+      .doc-meta {
+        text-align: right;
+      }
+
+      .doc-meta h2 {
+        font-size: 16px;
+        margin-bottom: 4px;
+        color: #111827;
+      }
+
+      .doc-meta .status {
+        display: inline-block;
+        margin-top: 4px;
+        padding: 2px 8px;
+        border-radius: 9999px;
+        background: #dbeafe;
+        color: #1d4ed8;
+        font-weight: 600;
+        font-size: 10px;
+        text-transform: uppercase;
+      }
+
+      .info-grid {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 18px;
+      }
+
+      .info-grid td,
+      .info-grid th {
+        padding: 6px 8px;
+        border: 1px solid #e5e7eb;
+        font-size: 10px;
+        vertical-align: top;
+      }
+
+      .info-grid th {
+        background-color: #f3f4f6;
+        color: #374151;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .section-title {
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        margin: 18px 0 8px;
+        color: #1d4ed8;
+        letter-spacing: 0.5px;
+      }
+
+      .items-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 18px;
+        font-size: 10px;
+      }
+
+      .items-table th,
+      .items-table td {
+        border: 1px solid #e5e7eb;
+        padding: 6px 8px;
+        text-align: center;
+      }
+
+      .items-table th {
+        background-color: #eef2ff;
+        color: #1e3a8a;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 9px;
+        letter-spacing: 0.4px;
+      }
+
+      .items-table td.description {
+        text-align: left;
+      }
+
+      .items-table tfoot td {
+        font-weight: 600;
+        background-color: #f9fafb;
+      }
+
+      .totals {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 16px;
+        font-size: 10px;
+      }
+
+      .totals td {
+        padding: 6px 8px;
+        border: 1px solid #e5e7eb;
+      }
+
+      .totals .label {
+        text-transform: uppercase;
+        font-weight: 600;
+        color: #334155;
+        background-color: #f8fafc;
+      }
+
+      .totals .amount {
+        text-align: right;
+        font-weight: 600;
+        color: #111827;
+      }
+
+      .notes {
+        border: 1px solid #e2e8f0;
+        padding: 12px;
+        font-size: 10px;
+        line-height: 1.5;
+        border-radius: 6px;
+        background-color: #f8fafc;
+      }
+
+      .signature-grid {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 24px;
+      }
+
+      .signature-grid td {
+        border: 1px solid #e5e7eb;
+        padding: 10px 12px;
+        height: 80px;
+        vertical-align: bottom;
+        font-size: 10px;
+      }
+
+      .signature-grid span {
+        display: block;
+        border-top: 1px solid #94a3b8;
+        margin-top: 42px;
+        padding-top: 4px;
+        text-transform: uppercase;
+        font-weight: 600;
+        color: #475569;
+      }
+
+      .footer {
+        margin-top: 18px;
+        font-size: 9px;
+        text-align: right;
+        color: #94a3b8;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="header">
+      <div class="brand">
+        {{#if company.logoDataUri}}
+          <div class="brand-logo">
+            <img src="{{company.logoDataUri}}" alt="Logo Corporativo" />
+          </div>
+        {{/if}}
+        <h1>{{company.name}}</h1>
+        {{#if company.taxId}}<p>{{company.taxId}}</p>{{/if}}
+        {{#if company.address}}<p>{{company.address}}</p>{{/if}}
+        {{#if company.phone}}<p>Tel: {{company.phone}}</p>{{/if}}
+        {{#if company.email}}<p>{{company.email}}</p>{{/if}}
+      </div>
+      <div class="doc-meta">
+        <h2>Valuación {{valuation.code}}</h2>
+        <p>Emitida: {{valuation.issueDateLabel}}</p>
+        {{#if valuation.dueDateLabel}}<p>Vence: {{valuation.dueDateLabel}}</p>{{/if}}
+        {{#if valuation.exchangeRateLabel}}<p>{{valuation.exchangeRateLabel}}</p>{{/if}}
+        <span class="status">{{valuation.statusLabel}}</span>
+      </div>
+    </header>
+
+    <table class="info-grid">
+      <tr>
+        <th colspan="2">Datos del Cliente</th>
+        <th colspan="2">Detalles del Proyecto</th>
+      </tr>
+      <tr>
+        <td><strong>Cliente</strong></td>
+        <td>{{valuation.customerName}}</td>
+        <td><strong>Denominación</strong></td>
+        <td>{{valuation.scope}}</td>
+      </tr>
+      <tr>
+        <td><strong>Contacto</strong></td>
+        <td>{{valuation.customerContact}}</td>
+        <td><strong>Pozo</strong></td>
+        <td>{{valuation.wellCode}}</td>
+      </tr>
+      <tr>
+        <td><strong>Código Cliente</strong></td>
+        <td>{{valuation.customerCode}}</td>
+        <td><strong>Taladro</strong></td>
+        <td>{{valuation.drillCode}}</td>
+      </tr>
+      <tr>
+        <td><strong>Teléfono</strong></td>
+        <td>{{valuation.customerPhone}}</td>
+        <td><strong>Orden de Trabajo</strong></td>
+        <td>{{valuation.workOrderNumber}}</td>
+      </tr>
+      <tr>
+        <td><strong>Correo</strong></td>
+        <td>{{valuation.customerEmail}}</td>
+        <td><strong>Referencia</strong></td>
+        <td>{{valuation.referenceNumber}}</td>
+      </tr>
+      <tr>
+        <td><strong>Dirección</strong></td>
+        <td>{{valuation.customerAddress}}</td>
+        <td><strong>Condiciones de Pago</strong></td>
+        <td>{{valuation.paymentTerms}}</td>
+      </tr>
+    </table>
+
+    <h3 class="section-title">Detalle de Servicios</h3>
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Descripción</th>
+          <th>Unidad</th>
+          <th>Cantidad</th>
+          <th>P.U. USD</th>
+          <th>Total USD</th>
+          {{#if valuation.totals.subtotalLocal}}
+            <th>P.U. Local</th>
+            <th>Total Local</th>
+          {{/if}}
+        </tr>
+      </thead>
+      <tbody>
+        {{#if valuation.items.length}}
+          {{#each valuation.items}}
+            <tr>
+              <td>{{index}}</td>
+              <td class="description">{{description}}</td>
+              <td>{{unit}}</td>
+              <td>{{quantity}}</td>
+              <td>{{unitPriceUsd}}</td>
+              <td>{{totalUsd}}</td>
+              {{#if ../valuation.totals.subtotalLocal}}
+                <td>{{unitPriceLocal}}</td>
+                <td>{{totalLocal}}</td>
+              {{/if}}
+            </tr>
+          {{/each}}
+        {{else}}
+          <tr>
+            <td colspan="{{#if valuation.totals.subtotalLocal}}8{{else}}6{{/if}}">Sin servicios registrados.</td>
+          </tr>
+        {{/if}}
+      </tbody>
+    </table>
+
+    <table class="totals">
+      <tbody>
+        <tr>
+          <td class="label" colspan="2">Subtotal USD</td>
+          <td class="amount">{{valuation.totals.subtotalUsd}}</td>
+        </tr>
+        {{#if valuation.totals.subtotalLocal}}
+          <tr>
+            <td class="label" colspan="2">Subtotal {{valuation.localCurrency}}</td>
+            <td class="amount">{{valuation.totals.subtotalLocal}}</td>
+          </tr>
+        {{/if}}
+        {{#if valuation.totals.taxUsd}}
+          <tr>
+            <td class="label" colspan="2">Impuestos USD</td>
+            <td class="amount">{{valuation.totals.taxUsd}}</td>
+          </tr>
+        {{/if}}
+        {{#if valuation.totals.taxLocal}}
+          <tr>
+            <td class="label" colspan="2">Impuestos {{valuation.localCurrency}}</td>
+            <td class="amount">{{valuation.totals.taxLocal}}</td>
+          </tr>
+        {{/if}}
+        <tr>
+          <td class="label" colspan="2">Total USD</td>
+          <td class="amount">{{valuation.totals.totalUsd}}</td>
+        </tr>
+        {{#if valuation.totals.totalLocal}}
+          <tr>
+            <td class="label" colspan="2">Total {{valuation.localCurrency}}</td>
+            <td class="amount">{{valuation.totals.totalLocal}}</td>
+          </tr>
+        {{/if}}
+      </tbody>
+    </table>
+
+    {{#if valuation.notes}}
+      <h3 class="section-title">Notas</h3>
+      <div class="notes">{{valuation.notes}}</div>
+    {{/if}}
+
+    {{#if valuation.terms}}
+      <h3 class="section-title">Términos y Condiciones</h3>
+      <div class="notes">{{valuation.terms}}</div>
+    {{/if}}
+
+    <table class="signature-grid">
+      <tr>
+        <td>
+          <span>Elaborado por: {{valuation.preparedBy}}</span>
+        </td>
+        <td>
+          <span>Autorizado por: {{valuation.approvedBy}}</span>
+        </td>
+        <td>
+          <span>Recibido por: {{valuation.receivedBy}}</span>
+          {{#if valuation.receivedId}}
+            <div>C.I.: {{valuation.receivedId}}</div>
+          {{/if}}
+        </td>
+      </tr>
+    </table>
+
+    <div class="footer">Documento generado el {{generatedAt}}</div>
+  </body>
+</html>

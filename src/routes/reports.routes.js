@@ -94,6 +94,30 @@ const normalizeString = (value, fallback = "") => {
   return text.length ? text : fallback;
 };
 
+const parseOptionalCoordinate = (value, fieldName, min, max) => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const text = `${value}`.trim();
+  if (!text.length) {
+    return null;
+  }
+
+  const numeric = Number.parseFloat(text);
+  if (Number.isNaN(numeric) || numeric < min || numeric > max) {
+    throw new Error(`${fieldName} debe estar entre ${min} y ${max} grados`);
+  }
+
+  return numeric;
+};
+
+const parseOptionalLatitude = (value, fieldName = "latitude") =>
+  parseOptionalCoordinate(value, fieldName, -90, 90);
+
+const parseOptionalLongitude = (value, fieldName = "longitude") =>
+  parseOptionalCoordinate(value, fieldName, -180, 180);
+
 const createFormatter = (locales, options) => {
   try {
     return new Intl.DateTimeFormat(locales, options);
@@ -148,7 +172,7 @@ let reportTemplateCache = {
   compiled: null,
   mtimeMs: null,
 };
-let logoDataUriPromise = null;
+let defaultLogoDataUriPromise = null;
 
 async function getReportTemplate() {
   try {
@@ -167,9 +191,9 @@ async function getReportTemplate() {
   }
 }
 
-async function getLogoDataUri() {
-  if (!logoDataUriPromise) {
-    logoDataUriPromise = fsPromises
+async function getDefaultLogoDataUri() {
+  if (!defaultLogoDataUriPromise) {
+    defaultLogoDataUriPromise = fsPromises
       .readFile(REPORT_LOGO_PATH)
       .then((buffer) => {
         const extension = path.extname(REPORT_LOGO_PATH).toLowerCase();
@@ -178,7 +202,24 @@ async function getLogoDataUri() {
       })
       .catch(() => null);
   }
-  return logoDataUriPromise;
+  return defaultLogoDataUriPromise;
+}
+
+async function getLogoDataUri() {
+  try {
+    const brandingSetting = await prisma.brandingSetting.findFirst();
+    if (brandingSetting?.pdfLogoUrl) {
+      const customLogoDataUri = await toDataUriFromImagePath(brandingSetting.pdfLogoUrl);
+      if (customLogoDataUri) {
+        return customLogoDataUri;
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Error desconocido";
+    console.warn("[reports] no se pudo cargar el logo personalizado", message);
+  }
+
+  return getDefaultLogoDataUri();
 }
 
 const toDate = (value) => {
@@ -419,6 +460,9 @@ const parseActivities = (activitiesInput, baseDate, serviceStart, serviceEnd) =>
       throw new Error(`La actividad ${index + 1} termina después del horario permitido del reporte`);
     }
 
+    const latitude = parseOptionalLatitude(activity?.latitude, `activities[${index}].latitude`);
+    const longitude = parseOptionalLongitude(activity?.longitude, `activities[${index}].longitude`);
+
     return {
       id,
       clientKey,
@@ -426,6 +470,8 @@ const parseActivities = (activitiesInput, baseDate, serviceStart, serviceEnd) =>
       startedAt,
       endedAt,
       durationMinutes,
+      latitude,
+      longitude,
       removeImage: parseBoolean(activity?.removeImage),
       existingImageUrl: normalizeString(activity?.imageUrl, "") || null,
       fileField: `activityFile-${clientKey}`,
@@ -498,11 +544,18 @@ const parseReportPayload = (rawPayload) => {
     throw new Error("El identificador del cliente es inválido");
   }
 
+  const teamId = payload.teamId !== undefined && payload.teamId !== null
+    ? Number.parseInt(payload.teamId, 10)
+    : null;
+  if (teamId !== null && Number.isNaN(teamId)) {
+    throw new Error("El identificador del equipo es inválido");
+  }
+
   if (!vesselId && !vesselName) {
     throw new Error("Debes seleccionar o escribir el nombre de la embarcación");
   }
 
-  if (!captainId && !captainName) {
+  if (!teamId && !captainId && !captainName) {
     throw new Error("Debes seleccionar o escribir el nombre del capitán");
   }
 
@@ -510,22 +563,8 @@ const parseReportPayload = (rawPayload) => {
     throw new Error("Debes seleccionar o escribir el nombre del cliente");
   }
 
-  const latitudeRaw = payload.latitude;
-  const longitudeRaw = payload.longitude;
-
-  const latitude = latitudeRaw === undefined || latitudeRaw === null || `${latitudeRaw}`.trim() === ""
-    ? null
-    : Number.parseFloat(`${latitudeRaw}`);
-  if (latitude !== null && (Number.isNaN(latitude) || latitude < -90 || latitude > 90)) {
-    throw new Error("La latitud debe estar entre -90 y 90 grados");
-  }
-
-  const longitude = longitudeRaw === undefined || longitudeRaw === null || `${longitudeRaw}`.trim() === ""
-    ? null
-    : Number.parseFloat(`${longitudeRaw}`);
-  if (longitude !== null && (Number.isNaN(longitude) || longitude < -180 || longitude > 180)) {
-    throw new Error("La longitud debe estar entre -180 y 180 grados");
-  }
+  const latitude = parseOptionalLatitude(payload.latitude, "latitude");
+  const longitude = parseOptionalLongitude(payload.longitude, "longitude");
 
   const serviceDate = parseDate(payload.serviceDate, "serviceDate");
   const normalizedServiceDate = new Date(serviceDate);
@@ -566,6 +605,7 @@ const parseReportPayload = (rawPayload) => {
     status,
     supportImageUrl: supportImageUrlNormalized,
     removeSupportImage,
+    teamId,
   };
 };
 
@@ -576,6 +616,8 @@ const mapActivity = (activity) => ({
   endedAt: activity.endedAt,
   durationMinutes: minutesBetween(activity.startedAt, activity.endedAt),
   imageUrl: activity.imageUrl || null,
+  latitude: activity.latitude ?? null,
+  longitude: activity.longitude ?? null,
   createdAt: activity.createdAt,
   updatedAt: activity.updatedAt,
 });
@@ -609,12 +651,114 @@ const mapVesselRecord = (vessel) => {
   };
 };
 
+const mapTeamCaptainAssignment = (assignment) => ({
+  id: assignment.captain?.id ?? assignment.captainId,
+  name: assignment.captain?.name ?? null,
+  cedula: assignment.captain?.cedula ?? null,
+  isPrimary: Boolean(assignment.isPrimary),
+});
+
+const mapTeamMarinerAssignment = (assignment) => ({
+  id: assignment.mariner?.id ?? assignment.marinerId,
+  name: assignment.mariner?.name ?? null,
+  cedula: assignment.mariner?.cedula ?? null,
+  role: assignment.role,
+  orderIndex: assignment.orderIndex,
+});
+
+const mapTeamSummary = (team) => {
+  if (!team) return null;
+  return {
+    id: team.id,
+    name: team.name,
+    description: team.description || null,
+    defaultCompanySupervisorName: team.defaultCompanySupervisorName || null,
+    defaultClientSupervisorName: team.defaultClientSupervisorName || null,
+    createdAt: team.createdAt,
+    updatedAt: team.updatedAt,
+    captains: Array.isArray(team.captains) ? team.captains.map(mapTeamCaptainAssignment) : [],
+    mariners: Array.isArray(team.mariners) ? team.mariners.map(mapTeamMarinerAssignment) : [],
+  };
+};
+
+const buildTeamInclude = () => ({
+  captains: {
+    include: { captain: true },
+    orderBy: [{ isPrimary: "desc" }, { id: "asc" }],
+  },
+  mariners: {
+    include: { mariner: true },
+    orderBy: [{ role: "asc" }, { orderIndex: "asc" }, { id: "asc" }],
+  },
+});
+
+const TEAM_ROLE_TO_REPORT_FIELD = {
+  PATRON: "patronName",
+  MOTORISTA: "motoristaName",
+  COCINERO: "cookName",
+  MARINERO: "sailorName",
+};
+
+const isBlank = (value) => {
+  if (value === null || value === undefined) return true;
+  if (typeof value !== "string") return false;
+  return value.trim().length === 0;
+};
+
+const computeTeamDefaults = (team) => {
+  if (!team) return null;
+
+  const primaryCaptain = Array.isArray(team.captains)
+    ? team.captains.find((assignment) => assignment.isPrimary) || team.captains[0]
+    : null;
+
+  const defaults = {
+    captainId: primaryCaptain?.captainId ?? null,
+    captainName: primaryCaptain?.captain?.name ?? null,
+    companySupervisorName: team.defaultCompanySupervisorName || null,
+    clientSupervisorName: team.defaultClientSupervisorName || null,
+    patronName: null,
+    motoristaName: null,
+    cookName: null,
+    sailorName: null,
+  };
+
+  if (Array.isArray(team.mariners)) {
+    const grouped = {
+      PATRON: [],
+      MOTORISTA: [],
+      COCINERO: [],
+      MARINERO: [],
+    };
+
+    team.mariners.forEach((assignment) => {
+      const role = assignment.role;
+      if (!grouped[role]) return;
+      const name = assignment.mariner?.name || null;
+      if (name) {
+        grouped[role].push(name);
+      }
+    });
+
+    Object.entries(grouped).forEach(([role, names]) => {
+      const field = TEAM_ROLE_TO_REPORT_FIELD[role];
+      if (!field) return;
+      if (names.length > 0) {
+        defaults[field] = names.join(", ");
+      }
+    });
+  }
+
+  return defaults;
+};
+
 const mapReport = (report) => ({
   id: report.id,
   vesselId: report.vesselId || null,
   vesselName: report.vesselName,
   captainName: report.captainName,
   captainId: report.captainId || null,
+  teamId: report.teamId || null,
   clientName: report.clientName,
   customerId: report.customerId || null,
   patronName: report.patronName,
@@ -637,6 +781,7 @@ const mapReport = (report) => ({
   captain: mapPerson(report.captain),
   customer: mapPerson(report.customer),
   vessel: mapVesselRecord(report.vessel),
+  team: mapTeamSummary(report.team),
   activities: (report.activities || []).sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime()).map(mapActivity),
 });
 
@@ -844,6 +989,9 @@ router.get("/", async (req, res) => {
           captain: true,
           customer: true,
           vessel: true,
+          team: {
+            include: buildTeamInclude(),
+          },
         },
         orderBy: { serviceDate: "desc" },
         skip: offset,
@@ -882,6 +1030,9 @@ router.get("/:id/pdf", async (req, res) => {
         captain: true,
         customer: true,
         vessel: true,
+        team: {
+          include: buildTeamInclude(),
+        },
       },
     });
 
@@ -935,6 +1086,9 @@ router.post("/:id/approve", async (req, res) => {
         captain: true,
         customer: true,
         vessel: true,
+        team: {
+          include: buildTeamInclude(),
+        },
       },
     });
 
@@ -956,6 +1110,9 @@ router.post("/:id/approve", async (req, res) => {
         captain: true,
         customer: true,
         vessel: true,
+        team: {
+          include: buildTeamInclude(),
+        },
       },
     });
 
@@ -982,6 +1139,9 @@ router.get("/:id", async (req, res) => {
         captain: true,
         customer: true,
         vessel: true,
+        team: {
+          include: buildTeamInclude(),
+        },
       },
     });
 
@@ -1012,6 +1172,8 @@ router.post("/", upload.any(), async (req, res) => {
         startedAt: activity.startedAt,
         endedAt: activity.endedAt,
         imageUrl: file ? toPublicImagePath(file.filename) : null,
+        latitude: activity.latitude ?? null,
+        longitude: activity.longitude ?? null,
       };
     });
 
@@ -1037,6 +1199,56 @@ router.post("/", upload.any(), async (req, res) => {
 
     let resolvedCaptainId = payload.captainId || null;
     let resolvedCaptainName = payload.captainName;
+    let resolvedCustomerId = payload.customerId || null;
+    let resolvedClientName = payload.clientName;
+    let resolvedPatronName = payload.patronName;
+    let resolvedMotoristaName = payload.motoristaName;
+    let resolvedCookName = payload.cookName;
+    let resolvedSailorName = payload.sailorName;
+    let resolvedCompanySupervisorName = payload.companySupervisorName;
+    let resolvedClientSupervisorName = payload.clientSupervisorName;
+    let resolvedTeamId = payload.teamId || null;
+
+    if (resolvedTeamId) {
+      const team = await prisma.team.findUnique({
+        where: { id: resolvedTeamId },
+        include: buildTeamInclude(),
+      });
+      if (!team) {
+        throw new Error("El equipo seleccionado no existe");
+      }
+
+      const defaults = computeTeamDefaults(team);
+      if (defaults) {
+        if (!resolvedCaptainId && defaults.captainId) {
+          resolvedCaptainId = defaults.captainId;
+        }
+        if (isBlank(resolvedCaptainName) && defaults.captainName) {
+          resolvedCaptainName = defaults.captainName;
+        }
+        if (isBlank(resolvedPatronName) && defaults.patronName) {
+          resolvedPatronName = defaults.patronName;
+        }
+        if (isBlank(resolvedMotoristaName) && defaults.motoristaName) {
+          resolvedMotoristaName = defaults.motoristaName;
+        }
+        if (isBlank(resolvedCookName) && defaults.cookName) {
+          resolvedCookName = defaults.cookName;
+        }
+        if (isBlank(resolvedSailorName) && defaults.sailorName) {
+          resolvedSailorName = defaults.sailorName;
+        }
+        if (isBlank(resolvedCompanySupervisorName) && defaults.companySupervisorName) {
+          resolvedCompanySupervisorName = defaults.companySupervisorName;
+        }
+        if (isBlank(resolvedClientSupervisorName) && defaults.clientSupervisorName) {
+          resolvedClientSupervisorName = defaults.clientSupervisorName;
+        }
+      }
+    } else {
+      resolvedTeamId = null;
+    }
+
     if (resolvedCaptainId) {
       const captain = await prisma.captain.findUnique({ where: { id: resolvedCaptainId } });
       if (!captain) {
@@ -1047,8 +1259,10 @@ router.post("/", upload.any(), async (req, res) => {
       resolvedCaptainId = null;
     }
 
-    let resolvedCustomerId = payload.customerId || null;
-    let resolvedClientName = payload.clientName;
+    if (isBlank(resolvedCaptainName)) {
+      throw new Error("Debes especificar un capitán para el reporte");
+    }
+
     if (resolvedCustomerId) {
       const customer = await prisma.customer.findUnique({ where: { id: resolvedCustomerId } });
       if (!customer) {
@@ -1059,20 +1273,32 @@ router.post("/", upload.any(), async (req, res) => {
       resolvedCustomerId = null;
     }
 
+    resolvedCaptainName = `${resolvedCaptainName}`.trim();
+    resolvedPatronName = isBlank(resolvedPatronName) ? "" : resolvedPatronName;
+    resolvedMotoristaName = isBlank(resolvedMotoristaName) ? "" : resolvedMotoristaName;
+    resolvedCookName = isBlank(resolvedCookName) ? "" : resolvedCookName;
+    resolvedSailorName = isBlank(resolvedSailorName) ? "" : resolvedSailorName;
+    resolvedCompanySupervisorName = isBlank(resolvedCompanySupervisorName)
+      ? null
+      : `${resolvedCompanySupervisorName}`.trim();
+    resolvedClientSupervisorName = isBlank(resolvedClientSupervisorName)
+      ? null
+      : `${resolvedClientSupervisorName}`.trim();
+
     const report = await prisma.report.create({
       data: {
-  vesselId: resolvedVesselId,
-  vesselName: resolvedVesselName,
+        vesselId: resolvedVesselId,
+        vesselName: resolvedVesselName,
         captainName: resolvedCaptainName,
         captainId: resolvedCaptainId,
         clientName: resolvedClientName,
         customerId: resolvedCustomerId,
-        patronName: payload.patronName,
-        motoristaName: payload.motoristaName,
-        cookName: payload.cookName,
-        sailorName: payload.sailorName,
-        companySupervisorName: payload.companySupervisorName,
-        clientSupervisorName: payload.clientSupervisorName,
+        patronName: resolvedPatronName,
+        motoristaName: resolvedMotoristaName,
+        cookName: resolvedCookName,
+        sailorName: resolvedSailorName,
+        companySupervisorName: resolvedCompanySupervisorName,
+        clientSupervisorName: resolvedClientSupervisorName,
         notes: payload.notes,
         serviceDate: payload.serviceDate,
         serviceStart: payload.serviceStart,
@@ -1082,6 +1308,7 @@ router.post("/", upload.any(), async (req, res) => {
         totalServiceMinutes: payload.totalServiceMinutes,
         status: payload.status,
         supportImageUrl,
+        teamId: resolvedTeamId,
         activities: {
           create: activitiesData,
         },
@@ -1092,6 +1319,10 @@ router.post("/", upload.any(), async (req, res) => {
         },
         captain: true,
         customer: true,
+        vessel: true,
+        team: {
+          include: buildTeamInclude(),
+        },
       },
     });
 
@@ -1127,9 +1358,9 @@ router.put("/:id", upload.any(), async (req, res) => {
       return res.status(404).json({ error: "Reporte no encontrado" });
     }
 
-  const payload = parseReportPayload(req.body?.data ?? req.body);
-  const fileMap = buildFileMap(req.files);
-  const supportEvidenceFile = fileMap.get("supportFile");
+    const payload = parseReportPayload(req.body?.data ?? req.body);
+    const fileMap = buildFileMap(req.files);
+    const supportEvidenceFile = fileMap.get("supportFile");
 
     let resolvedVesselId = payload.vesselId || null;
     let resolvedVesselName = payload.vesselName;
@@ -1145,6 +1376,56 @@ router.put("/:id", upload.any(), async (req, res) => {
 
     let resolvedCaptainId = payload.captainId || null;
     let resolvedCaptainName = payload.captainName;
+    let resolvedCustomerId = payload.customerId || null;
+    let resolvedClientName = payload.clientName;
+    let resolvedPatronName = payload.patronName;
+    let resolvedMotoristaName = payload.motoristaName;
+    let resolvedCookName = payload.cookName;
+    let resolvedSailorName = payload.sailorName;
+    let resolvedCompanySupervisorName = payload.companySupervisorName;
+    let resolvedClientSupervisorName = payload.clientSupervisorName;
+    let resolvedTeamId = payload.teamId || null;
+
+    if (resolvedTeamId) {
+      const team = await prisma.team.findUnique({
+        where: { id: resolvedTeamId },
+        include: buildTeamInclude(),
+      });
+      if (!team) {
+        throw new Error("El equipo seleccionado no existe");
+      }
+
+      const defaults = computeTeamDefaults(team);
+      if (defaults) {
+        if (!resolvedCaptainId && defaults.captainId) {
+          resolvedCaptainId = defaults.captainId;
+        }
+        if (isBlank(resolvedCaptainName) && defaults.captainName) {
+          resolvedCaptainName = defaults.captainName;
+        }
+        if (isBlank(resolvedPatronName) && defaults.patronName) {
+          resolvedPatronName = defaults.patronName;
+        }
+        if (isBlank(resolvedMotoristaName) && defaults.motoristaName) {
+          resolvedMotoristaName = defaults.motoristaName;
+        }
+        if (isBlank(resolvedCookName) && defaults.cookName) {
+          resolvedCookName = defaults.cookName;
+        }
+        if (isBlank(resolvedSailorName) && defaults.sailorName) {
+          resolvedSailorName = defaults.sailorName;
+        }
+        if (isBlank(resolvedCompanySupervisorName) && defaults.companySupervisorName) {
+          resolvedCompanySupervisorName = defaults.companySupervisorName;
+        }
+        if (isBlank(resolvedClientSupervisorName) && defaults.clientSupervisorName) {
+          resolvedClientSupervisorName = defaults.clientSupervisorName;
+        }
+      }
+    } else {
+      resolvedTeamId = null;
+    }
+
     if (resolvedCaptainId) {
       const captain = await prisma.captain.findUnique({ where: { id: resolvedCaptainId } });
       if (!captain) {
@@ -1155,8 +1436,10 @@ router.put("/:id", upload.any(), async (req, res) => {
       resolvedCaptainId = null;
     }
 
-    let resolvedCustomerId = payload.customerId || null;
-    let resolvedClientName = payload.clientName;
+    if (isBlank(resolvedCaptainName)) {
+      throw new Error("Debes especificar un capitán para el reporte");
+    }
+
     if (resolvedCustomerId) {
       const customer = await prisma.customer.findUnique({ where: { id: resolvedCustomerId } });
       if (!customer) {
@@ -1166,6 +1449,18 @@ router.put("/:id", upload.any(), async (req, res) => {
     } else {
       resolvedCustomerId = null;
     }
+
+    resolvedCaptainName = `${resolvedCaptainName}`.trim();
+    resolvedPatronName = isBlank(resolvedPatronName) ? "" : resolvedPatronName;
+    resolvedMotoristaName = isBlank(resolvedMotoristaName) ? "" : resolvedMotoristaName;
+    resolvedCookName = isBlank(resolvedCookName) ? "" : resolvedCookName;
+    resolvedSailorName = isBlank(resolvedSailorName) ? "" : resolvedSailorName;
+    resolvedCompanySupervisorName = isBlank(resolvedCompanySupervisorName)
+      ? null
+      : `${resolvedCompanySupervisorName}`.trim();
+    resolvedClientSupervisorName = isBlank(resolvedClientSupervisorName)
+      ? null
+      : `${resolvedClientSupervisorName}`.trim();
 
     const existingActivitiesMap = new Map(
       existing.activities.map((activity) => [activity.id, activity])
@@ -1200,6 +1495,8 @@ router.put("/:id", upload.any(), async (req, res) => {
           description: activity.description,
           startedAt: activity.startedAt,
           endedAt: activity.endedAt,
+          latitude: activity.latitude ?? null,
+          longitude: activity.longitude ?? null,
         };
 
         if (file) {
@@ -1223,6 +1520,8 @@ router.put("/:id", upload.any(), async (req, res) => {
           startedAt: activity.startedAt,
           endedAt: activity.endedAt,
           imageUrl: file ? toPublicImagePath(file.filename) : null,
+          latitude: activity.latitude ?? null,
+          longitude: activity.longitude ?? null,
         });
       }
     });
@@ -1238,18 +1537,18 @@ router.put("/:id", upload.any(), async (req, res) => {
       await tx.report.update({
         where: { id: reportId },
         data: {
-    vesselId: resolvedVesselId,
-    vesselName: resolvedVesselName,
+          vesselId: resolvedVesselId,
+          vesselName: resolvedVesselName,
           captainName: resolvedCaptainName,
           captainId: resolvedCaptainId,
           clientName: resolvedClientName,
           customerId: resolvedCustomerId,
-          patronName: payload.patronName,
-          motoristaName: payload.motoristaName,
-          cookName: payload.cookName,
-          sailorName: payload.sailorName,
-          companySupervisorName: payload.companySupervisorName,
-          clientSupervisorName: payload.clientSupervisorName,
+          patronName: resolvedPatronName,
+          motoristaName: resolvedMotoristaName,
+          cookName: resolvedCookName,
+          sailorName: resolvedSailorName,
+          companySupervisorName: resolvedCompanySupervisorName,
+          clientSupervisorName: resolvedClientSupervisorName,
           notes: payload.notes,
           serviceDate: payload.serviceDate,
           serviceStart: payload.serviceStart,
@@ -1259,6 +1558,7 @@ router.put("/:id", upload.any(), async (req, res) => {
           totalServiceMinutes: payload.totalServiceMinutes,
           status: payload.status,
           supportImageUrl: nextSupportImageUrl,
+          teamId: resolvedTeamId,
         },
       });
 
@@ -1301,6 +1601,10 @@ router.put("/:id", upload.any(), async (req, res) => {
         },
         captain: true,
         customer: true,
+        vessel: true,
+        team: {
+          include: buildTeamInclude(),
+        },
       },
     });
 

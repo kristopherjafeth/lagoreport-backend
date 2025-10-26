@@ -13,6 +13,12 @@ import captainsRoutes from './routes/captains.routes.js';
 import customersRoutes from './routes/customers.routes.js';
 import vesselsRoutes from './routes/vessels.routes.js';
 import rolesRoutes from './routes/roles.routes.js';
+import sampleDataRoutes from './routes/sample-data.routes.js';
+import teamsRoutes from './routes/teams.routes.js';
+import marinersRoutes from './routes/mariners.routes.js';
+import brandingRoutes from './routes/branding.routes.js';
+import servicesRoutes from './routes/services.routes.js';
+import valuationsRoutes from './routes/valuations.routes.js';
 
 const app = express();
 
@@ -31,6 +37,12 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/captains', captainsRoutes);
 app.use('/api/customers', customersRoutes);
 app.use('/api/vessels', vesselsRoutes);
+app.use('/api/mariners', marinersRoutes);
+app.use('/api/branding', brandingRoutes);
+app.use('/api/sample-data', sampleDataRoutes);
+app.use('/api/teams', teamsRoutes);
+app.use('/api/services', servicesRoutes);
+app.use('/api/valuations', valuationsRoutes);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
