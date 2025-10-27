@@ -1,5 +1,5 @@
 -- AlterTable
-ALTER TABLE `brandingsetting` ADD COLUMN `address` VARCHAR(191) NULL,
+ALTER TABLE `BrandingSetting` ADD COLUMN `address` VARCHAR(191) NULL,
     ADD COLUMN `legalName` VARCHAR(191) NULL,
     ADD COLUMN `phone` VARCHAR(191) NULL,
     ADD COLUMN `taxId` VARCHAR(191) NULL;
