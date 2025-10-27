@@ -34,7 +34,6 @@ router.post("/clear", async (req, res) => {
     res.json({
       message: "Datos de ejemplo eliminados",
       summary: {
-        greenhouseCount: 0,
         vesselCount: 0,
         captainCount: 0,
         customerCount: 0,

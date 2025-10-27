@@ -1,3 +1,6 @@
+-- AlterTable
+ALTER TABLE `Report` ADD COLUMN `teamId` INTEGER NULL;
+
 -- CreateTable
 CREATE TABLE `Mariner` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,

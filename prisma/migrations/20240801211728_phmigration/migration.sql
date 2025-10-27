@@ -1,5 +1,5 @@
 -- CreateTable
-CREATE TABLE `ph` (
+CREATE TABLE `Ph` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `value` DOUBLE NOT NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -10,4 +10,4 @@ CREATE TABLE `ph` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- AddForeignKey
-ALTER TABLE `ph` ADD CONSTRAINT `ph_greenhouseId_fkey` FOREIGN KEY (`greenhouseId`) REFERENCES `Greenhouse`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `Ph` ADD CONSTRAINT `ph_greenhouseId_fkey` FOREIGN KEY (`greenhouseId`) REFERENCES `Greenhouse`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

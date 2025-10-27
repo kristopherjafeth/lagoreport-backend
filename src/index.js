@@ -3,7 +3,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cors from 'cors'; // Importa CORS
 
-import greenhousesRoutes from './routes/greenhouses.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import plansRoutes from './routes/plans.routes.js';
 import usersRoutes from './routes/users.routes.js';
@@ -27,7 +26,6 @@ app.use(express.json());
 app.use(cors());
 
 
-app.use('/api', greenhousesRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/plans', plansRoutes);
 app.use('/api/roles', rolesRoutes);

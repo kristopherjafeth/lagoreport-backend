@@ -51,17 +51,6 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
-    module: "greenhouses",
-    label: "Invernaderos",
-    description: "Gestión de los invernaderos y sus variables ambientales.",
-    permissions: [
-      { value: "greenhouses.view", label: "Ver invernaderos" },
-      { value: "greenhouses.create", label: "Registrar invernaderos" },
-      { value: "greenhouses.update", label: "Editar invernaderos" },
-      { value: "greenhouses.delete", label: "Eliminar invernaderos" },
-    ],
-  },
-  {
     module: "plans",
     label: "Planes de suscripción",
     description: "Configuración y mantenimiento de planes de pago.",
@@ -138,8 +127,6 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     "captains.update",
     "vessels.view",
     "vessels.update",
-    "greenhouses.view",
-    "greenhouses.update",
     "plans.view",
     "catalogs.view",
     "users.view",
@@ -154,7 +141,6 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     "customers.view",
     "captains.view",
     "vessels.view",
-    "greenhouses.view",
     "catalogs.view",
   ],
 };

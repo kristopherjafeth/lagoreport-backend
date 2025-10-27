@@ -4,7 +4,7 @@ const prisma = new PrismaClient()
 
 async function main() {
 
-    console.log("Created a new greenhouse" );
+    console.log("Prisma script executed");
 
 }
 

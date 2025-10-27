@@ -5,7 +5,6 @@ const DEMO_PLAN_SLUGS = ["demo-basic", "demo-empresarial"];
 const DEMO_VESSEL_REGISTRATIONS = ["DEMO-IMO-1001", "DEMO-IMO-1002", "DEMO-IMO-1003"];
 const DEMO_CAPTAIN_CEDULAS = ["V-10000001", "V-10000002", "V-10000003"];
 const DEMO_CUSTOMER_CEDULAS = ["J-40000001", "J-40000002", "J-40000003"];
-const DEMO_GREENHOUSE_NAMES = ["Demo Invernadero Andino"];
 const DEMO_SERVICE_CODES = ["DEMO-SRV-001", "DEMO-SRV-002", "DEMO-SRV-003", "DEMO-SRV-004"];
 const DEMO_VALUATION_CODES = ["VAL-DEMO-001", "VAL-DEMO-002", "VAL-DEMO-003"];
 
@@ -20,7 +19,7 @@ const SAMPLE_ROLES = [
     slug: "user",
     name: "Operador",
     description: "Puede consultar reportes y métricas",
-    permissions: ["reports:read", "greenhouses:read"]
+  permissions: ["reports:read"]
   },
   {
     slug: "captain",
@@ -52,15 +51,6 @@ const SAMPLE_PLANS = [
     active: true
   }
 ];
-
-const SAMPLE_GREENHOUSE = {
-  name: "Demo Invernadero Andino",
-  country: "Venezuela",
-  website: "https://demo.lagoreport.com",
-  phone: "+58 412-555-0101",
-  cif: "J-98765432-1",
-  profileImage: "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=800&q=80"
-};
 
 const SAMPLE_VESSELS = [
   {
@@ -483,40 +473,6 @@ function generateRecentReportConfigs(months = 6) {
   return configs;
 }
 
-function buildSensorSeries(count) {
-  const start = new Date();
-  start.setMinutes(0, 0, 0);
-  start.setHours(start.getHours() - count + 1);
-
-  const entries = [];
-  for (let index = 0; index < count; index += 1) {
-    const timestamp = new Date(start.getTime() + index * 60 * 60 * 1000);
-    const phase = index / Math.max(count - 1, 1);
-    const temperature = 24 + Math.sin(phase * Math.PI * 2) * 4;
-    const humidity = 58 + Math.cos(phase * Math.PI * 2) * 8;
-    const brightness = 450 + Math.max(Math.sin((phase - 0.2) * Math.PI * 2), 0) * 320;
-    const soilHumidity = 34 + Math.cos((phase + 0.15) * Math.PI * 2) * 4;
-    const co2 = 420 + Math.sin((phase + 0.3) * Math.PI * 2) * 60;
-    const ph = 6.3 + Math.sin((phase + 0.5) * Math.PI * 2) * 0.2;
-    const luminosity = 62 + Math.max(Math.sin((phase + 0.1) * Math.PI * 2), 0) * 20;
-    const moi = 30 + Math.cos((phase + 0.4) * Math.PI * 2) * 2.5;
-
-    entries.push({
-      timestamp,
-      temperature: Number(temperature.toFixed(2)),
-      humidity: Number(humidity.toFixed(2)),
-      brightness: Number(brightness.toFixed(2)),
-      soilHumidity: Number(soilHumidity.toFixed(2)),
-      co2: Number(co2.toFixed(2)),
-      ph: Number(ph.toFixed(2)),
-      luminosity: Number(luminosity.toFixed(2)),
-      moi: Number(moi.toFixed(2))
-    });
-  }
-
-  return entries;
-}
-
 async function ensureRoles(tx) {
   for (const role of SAMPLE_ROLES) {
     await tx.role.upsert({
@@ -550,110 +506,6 @@ async function ensurePlans(tx) {
     created.push(result);
   }
   return created;
-}
-
-async function createGreenhouseWithSensors(tx) {
-  const greenhouse = await tx.greenhouse.create({
-    data: SAMPLE_GREENHOUSE
-  });
-
-  const sensorSeries = buildSensorSeries(24);
-
-  await tx.temperature.createMany({
-    data: sensorSeries.map((entry) => ({
-      greenhouseId: greenhouse.id,
-      value: entry.temperature,
-      timestamp: entry.timestamp
-    }))
-  });
-  await tx.humidity.createMany({
-    data: sensorSeries.map((entry) => ({
-      greenhouseId: greenhouse.id,
-      value: entry.humidity,
-      timestamp: entry.timestamp
-    }))
-  });
-  await tx.brightness.createMany({
-    data: sensorSeries.map((entry) => ({
-      greenhouseId: greenhouse.id,
-      value: entry.brightness,
-      timestamp: entry.timestamp
-    }))
-  });
-  await tx.soilHumidity.createMany({
-    data: sensorSeries.map((entry) => ({
-      greenhouseId: greenhouse.id,
-      value: entry.soilHumidity,
-      timestamp: entry.timestamp
-    }))
-  });
-  await tx.co2.createMany({
-    data: sensorSeries.map((entry) => ({
-      greenhouseId: greenhouse.id,
-      value: entry.co2,
-      timestamp: entry.timestamp
-    }))
-  });
-  await tx.ph.createMany({
-    data: sensorSeries.map((entry) => ({
-      greenhouseId: greenhouse.id,
-      value: entry.ph,
-      timestamp: entry.timestamp
-    }))
-  });
-  await tx.luminosity.createMany({
-    data: sensorSeries.map((entry) => ({
-      greenhouseId: greenhouse.id,
-      value: entry.luminosity,
-      timestamp: entry.timestamp
-    }))
-  });
-  await tx.moi.createMany({
-    data: sensorSeries.map((entry) => ({
-      greenhouseId: greenhouse.id,
-      value: entry.moi,
-      timestamp: entry.timestamp
-    }))
-  });
-
-  await tx.fan1.createMany({
-    data: [0.2, 0.6, 0.1, 0.7].map((value) => ({
-      greenhouseId: greenhouse.id,
-      value
-    }))
-  });
-  await tx.lamp1.createMany({
-    data: [0.1, 0.8, 0.3].map((value) => ({
-      greenhouseId: greenhouse.id,
-      value
-    }))
-  });
-  await tx.pump1.createMany({
-    data: [0.5, 0.4, 0.9].map((value) => ({
-      greenhouseId: greenhouse.id,
-      value
-    }))
-  });
-  await tx.heater1.createMany({
-    data: [0.0, 0.25, 0.45].map((value) => ({
-      greenhouseId: greenhouse.id,
-      value
-    }))
-  });
-  await tx.rs_med.createMany({
-    data: [2.1, 2.4, 2.6].map((value) => ({
-      greenhouseId: greenhouse.id,
-      value
-    }))
-  });
-  await tx.volts.createMany({
-    data: [110.5, 109.9, 111.2].map((value) => ({
-      greenhouseId: greenhouse.id,
-      value
-    }))
-  });
-
-  return greenhouse;
 }
 
 async function createServices(tx) {
@@ -727,7 +579,7 @@ async function createCatalogs(tx) {
   return { vessels, captains, customers };
 }
 
-async function createValuations(tx, catalogs, services) {
+async function createValuations(prisma, catalogs, services) {
   const valuations = [];
   const serviceMap = new Map(services.map((service) => [service.code, service]));
 
@@ -816,7 +668,7 @@ async function createValuations(tx, catalogs, services) {
       subtotalLocal = toRoundedNumber(subtotalLocal, 2);
     }
 
-    const created = await tx.valuation.create({
+  const created = await prisma.valuation.create({
       data: {
         code: config.code,
         title: config.title,
@@ -874,7 +726,7 @@ async function createValuations(tx, catalogs, services) {
   return valuations;
 }
 
-async function createReports(tx, catalogs) {
+async function createReports(prisma, catalogs) {
   const reports = [];
   const reportConfigs = generateRecentReportConfigs(6);
 
@@ -891,7 +743,7 @@ async function createReports(tx, catalogs) {
     const serviceEnd = toDateTime(reportConfig.date, reportConfig.endTime);
     const totalMinutes = minutesBetween(serviceStart, serviceEnd);
 
-    const created = await tx.report.create({
+  const created = await prisma.report.create({
       data: {
         vesselId: vessel.id,
         vesselName: vessel.name,
@@ -995,34 +847,6 @@ async function removeExistingSampleData(tx) {
     }
   });
 
-  const greenhouseIds = await tx.greenhouse.findMany({
-    where: {
-      name: {
-        in: DEMO_GREENHOUSE_NAMES
-      }
-    },
-    select: { id: true }
-  });
-
-  if (greenhouseIds.length > 0) {
-    const ids = greenhouseIds.map((item) => item.id);
-    await tx.temperature.deleteMany({ where: { greenhouseId: { in: ids } } });
-    await tx.humidity.deleteMany({ where: { greenhouseId: { in: ids } } });
-    await tx.brightness.deleteMany({ where: { greenhouseId: { in: ids } } });
-    await tx.soilHumidity.deleteMany({ where: { greenhouseId: { in: ids } } });
-    await tx.co2.deleteMany({ where: { greenhouseId: { in: ids } } });
-    await tx.ph.deleteMany({ where: { greenhouseId: { in: ids } } });
-    await tx.luminosity.deleteMany({ where: { greenhouseId: { in: ids } } });
-    await tx.moi.deleteMany({ where: { greenhouseId: { in: ids } } });
-    await tx.fan1.deleteMany({ where: { greenhouseId: { in: ids } } });
-    await tx.lamp1.deleteMany({ where: { greenhouseId: { in: ids } } });
-    await tx.pump1.deleteMany({ where: { greenhouseId: { in: ids } } });
-    await tx.heater1.deleteMany({ where: { greenhouseId: { in: ids } } });
-    await tx.rs_med.deleteMany({ where: { greenhouseId: { in: ids } } });
-    await tx.volts.deleteMany({ where: { greenhouseId: { in: ids } } });
-    await tx.greenhouse.deleteMany({ where: { id: { in: ids } } });
-  }
-
   await tx.plan.deleteMany({
     where: {
       slug: {
@@ -1041,61 +865,47 @@ export async function clearSampleData(prisma = new PrismaClient()) {
 }
 
 export async function seedSampleData(prisma = new PrismaClient()) {
-  await prisma.$transaction(async (tx) => {
-    await removeExistingSampleData(tx);
-  });
+  // Limpieza de datos demo fuera de transacción
+  await removeExistingSampleData(prisma);
 
-  const summary = await prisma.$transaction(async (tx) => {
+  // Inserción de roles, planes, servicios y catálogos en transacción
+  const { services, catalogs } = await prisma.$transaction(async (tx) => {
     await ensureRoles(tx);
     await ensurePlans(tx);
-    const greenhouse = await createGreenhouseWithSensors(tx);
     const services = await createServices(tx);
     const catalogs = await createCatalogs(tx);
-    const valuations = await createValuations(tx, catalogs, services);
-    const reports = await createReports(tx, catalogs);
-    return {
-      greenhouse,
-      services,
-      catalogs,
-      valuations,
-      reports
-    };
+    return { services, catalogs };
   });
 
+  // Inserción de valuaciones fuera de transacción
+  const valuations = await createValuations(prisma, catalogs, services);
+
+  // Inserción de reportes fuera de transacción
+  const reports = await createReports(prisma, catalogs);
+
   return {
-    greenhouseCount: summary.greenhouse ? 1 : 0,
-    serviceCount: summary.services.length,
-    vesselCount: summary.catalogs.vessels.length,
-    captainCount: summary.catalogs.captains.length,
-    customerCount: summary.catalogs.customers.length,
-    valuationCount: summary.valuations.length,
-    reportCount: summary.reports.length
+    serviceCount: services.length,
+    vesselCount: catalogs.vessels.length,
+    captainCount: catalogs.captains.length,
+    customerCount: catalogs.customers.length,
+    valuationCount: valuations.length,
+    reportCount: reports.length
   };
 }
 
 export async function getSampleDataStatus(prisma = new PrismaClient()) {
-  const [reportCount, greenhouseCount] = await Promise.all([
-    prisma.report.count({
-      where: {
-        notes: {
-          contains: DEMO_TAG
-        }
+  const reportCount = await prisma.report.count({
+    where: {
+      notes: {
+        contains: DEMO_TAG
       }
-    }),
-    prisma.greenhouse.count({
-      where: {
-        name: {
-          in: DEMO_GREENHOUSE_NAMES
-        }
-      }
-    })
-  ]);
+    }
+  });
 
   return {
-    hasSampleData: reportCount > 0 || greenhouseCount > 0,
+    hasSampleData: reportCount > 0,
     counts: {
-      reports: reportCount,
-      greenhouses: greenhouseCount
+      reports: reportCount
     }
   };
 }
