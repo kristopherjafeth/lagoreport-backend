@@ -1,16 +1,16 @@
 -- AlterTable
-ALTER TABLE `captain` ALTER COLUMN `updatedAt` DROP DEFAULT;
+ALTER TABLE `Captain` ALTER COLUMN `updatedAt` DROP DEFAULT;
 
 -- AlterTable
-ALTER TABLE `customer` ALTER COLUMN `updatedAt` DROP DEFAULT;
+ALTER TABLE `Customer`ALTER COLUMN `updatedAt` DROP DEFAULT;
 
 -- AlterTable
-ALTER TABLE `report` ALTER COLUMN `updatedAt` DROP DEFAULT;
+ALTER TABLE `Report` ALTER COLUMN `updatedAt` DROP DEFAULT;
 
 -- AlterTable
-ALTER TABLE `reportactivity` ADD COLUMN `latitude` DOUBLE NULL,
+ALTER TABLE `ReportActivity` ADD COLUMN `latitude` DOUBLE NULL,
     ADD COLUMN `longitude` DOUBLE NULL,
     ALTER COLUMN `updatedAt` DROP DEFAULT;
 
 -- AlterTable
-ALTER TABLE `role` ALTER COLUMN `updatedAt` DROP DEFAULT;
+ALTER TABLE `Role` ALTER COLUMN `updatedAt` DROP DEFAULT;
