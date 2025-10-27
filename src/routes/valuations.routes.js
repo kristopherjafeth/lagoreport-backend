@@ -22,12 +22,34 @@ let valuationTemplateCache = {
 };
 
 const VALUATION_STATUS_SET = new Set(["DRAFT", "SENT", "APPROVED", "REJECTED", "CANCELLED"]);
+const APPROVED_STATUS_SET = new Set(["APPROVED"]);
+const PIPELINE_STATUS_SET = new Set(["DRAFT", "SENT"]);
 const STATUS_LABELS = {
   DRAFT: "Borrador",
   SENT: "Enviado",
   APPROVED: "Aprobado",
   REJECTED: "Rechazado",
   CANCELLED: "Cancelado",
+};
+
+const DAY_KEYS = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+];
+
+const DAY_LABELS = {
+  monday: "Lunes",
+  tuesday: "Martes",
+  wednesday: "Miércoles",
+  thursday: "Jueves",
+  friday: "Viernes",
+  saturday: "Sábado",
+  sunday: "Domingo",
 };
 
 const DEFAULT_COMPANY = {
@@ -177,6 +199,23 @@ const decimalToNumber = (value) => {
   }
 };
 
+const normalizeDailyBreakdown = (value) => {
+  const result = {};
+  if (!value || typeof value !== "object") {
+    DAY_KEYS.forEach((key) => {
+      result[key] = 0;
+    });
+    return result;
+  }
+
+  DAY_KEYS.forEach((key) => {
+    const raw = value && typeof value === "object" && key in value ? value[key] : 0;
+    const numeric = Number(raw);
+    result[key] = Number.isFinite(numeric) ? Number(numeric.toFixed(2)) : 0;
+  });
+  return result;
+};
+
 const normalizeString = (value, { required = false, fallback = null, maxLength = 255 } = {}) => {
   if (value === undefined || value === null) {
     if (required) {
@@ -267,6 +306,7 @@ const mapItem = (item) => ({
   orderIndex: item.orderIndex,
   createdAt: item.createdAt,
   updatedAt: item.updatedAt,
+  dailyBreakdown: normalizeDailyBreakdown(item.dailyBreakdown),
   service: item.service
     ? {
         id: item.service.id,
@@ -350,6 +390,23 @@ async function renderValuationHtml(valuation) {
     }
   }
 
+  const dayColumns = DAY_KEYS.map((key) => ({
+    key,
+    label: DAY_LABELS[key],
+  }));
+
+  const hasLocalColumns = Boolean(
+    localFormatter &&
+      ((valuation.subtotalLocal !== null && valuation.subtotalLocal !== undefined) ||
+        (valuation.totalLocal !== null && valuation.totalLocal !== undefined) ||
+        valuation.items.some(
+          (item) => item.unitPriceLocal !== null && item.unitPriceLocal !== undefined,
+        ) ||
+        valuation.items.some((item) => item.totalLocal !== null && item.totalLocal !== undefined)),
+  );
+
+  const itemsColumnCount = 3 + dayColumns.length + 1 + 2 + (hasLocalColumns ? 2 : 0);
+
   const context = {
     company,
     valuation: {
@@ -370,6 +427,8 @@ async function renderValuationHtml(valuation) {
       workOrderNumber: valuation.workOrderNumber ?? "",
       referenceNumber: valuation.referenceNumber ?? "",
       paymentTerms: valuation.paymentTerms ?? "",
+  currency: valuation.currency ?? "USD",
+  localCurrency: valuation.localCurrency ?? "",
       preparedBy: valuation.preparedBy ?? "",
       approvedBy: valuation.approvedBy ?? "",
       receivedBy: valuation.receivedBy ?? "",
@@ -397,22 +456,39 @@ async function renderValuationHtml(valuation) {
       },
       notes: valuation.notes ?? "",
       terms: valuation.terms ?? "",
-      items: valuation.items.map((item, index) => ({
-        index: index + 1,
-        description: item.description,
-        unit: item.unit,
-        quantity: Number(item.quantity).toFixed(2),
-        unitPriceUsd: numberFormatterUsd.format(item.unitPriceUsd ?? 0),
-        totalUsd: numberFormatterUsd.format(item.totalUsd ?? 0),
-        unitPriceLocal:
-          item.unitPriceLocal !== null && item.unitPriceLocal !== undefined && localFormatter
-            ? localFormatter.format(item.unitPriceLocal)
-            : null,
-        totalLocal:
-          item.totalLocal !== null && item.totalLocal !== undefined && localFormatter
-            ? localFormatter.format(item.totalLocal)
-            : null,
-      })),
+      items: valuation.items.map((item, index) => {
+        const breakdown = normalizeDailyBreakdown(item.dailyBreakdown);
+        const dailyTotal = dayColumns.reduce(
+          (acc, column) => acc + (Number(breakdown[column.key] ?? 0) || 0),
+          0,
+        );
+        const totalHoursNumeric = dailyTotal > 0 ? dailyTotal : Number(item.quantity ?? 0);
+        return {
+          index: index + 1,
+          description: item.description,
+          unit: item.unit,
+          quantity: Number(item.quantity).toFixed(2),
+          totalHours: Number(totalHoursNumeric ?? 0).toFixed(2),
+          unitPriceUsd: numberFormatterUsd.format(item.unitPriceUsd ?? 0),
+          totalUsd: numberFormatterUsd.format(item.totalUsd ?? 0),
+          unitPriceLocal:
+            item.unitPriceLocal !== null && item.unitPriceLocal !== undefined && localFormatter
+              ? localFormatter.format(item.unitPriceLocal)
+              : null,
+          totalLocal:
+            item.totalLocal !== null && item.totalLocal !== undefined && localFormatter
+              ? localFormatter.format(item.totalLocal)
+              : null,
+          dayValues: dayColumns.map((column) => ({
+            key: column.key,
+            label: column.label,
+            value: Number(breakdown[column.key] ?? 0).toFixed(2),
+          })),
+        };
+      }),
+      dayColumns,
+      hasLocalColumns,
+      itemsColumnCount,
     },
     generatedAt: dateFormatter.format(new Date()),
   };
@@ -509,7 +585,30 @@ async function normalizeValuationPayload(payload, { allowEmptyItems = false } = 
       throw new Error(`La unidad del servicio en la línea ${index + 1} es obligatoria`);
     }
 
-    const quantity = parseDecimal(itemRaw.quantity, "Cantidad", { required: true });
+    let quantityFromDaily = 0;
+    const dailyBreakdown = {};
+    const dailyRaw = itemRaw.dailyBreakdown && typeof itemRaw.dailyBreakdown === "object" ? itemRaw.dailyBreakdown : {};
+
+    DAY_KEYS.forEach((key) => {
+      const label = `${DAY_LABELS[key]} (horas)`;
+      const hoursValue = parseDecimal(dailyRaw[key], label, { defaultValue: 0 });
+      const numericHours = Number(hoursValue ?? 0);
+      const roundedHours = numericHours > 0 ? Number(numericHours.toFixed(2)) : 0;
+      dailyBreakdown[key] = roundedHours;
+      quantityFromDaily += roundedHours;
+    });
+
+    quantityFromDaily = Number(quantityFromDaily.toFixed(2));
+
+    let quantity = quantityFromDaily;
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      const parsedQuantity = parseDecimal(itemRaw.quantity, "Cantidad", { required: true });
+      if (parsedQuantity === null || parsedQuantity === undefined || parsedQuantity <= 0) {
+        throw new Error(`La cantidad del servicio en la línea ${index + 1} debe ser mayor a cero`);
+      }
+      quantity = Number(parsedQuantity.toFixed(2));
+    }
+
     const unitPriceUsd = parseDecimal(itemRaw.unitPriceUsd ?? service?.unitPriceUsd, "Precio USD", {
       required: true,
     });
@@ -547,6 +646,7 @@ async function normalizeValuationPayload(payload, { allowEmptyItems = false } = 
       totalUsd,
       totalLocal,
       orderIndex: index,
+      dailyBreakdown,
     };
   });
 
@@ -662,6 +762,7 @@ router.get("/summary", async (req, res) => {
         totalLocal: true,
         customerName: true,
         customerId: true,
+        status: true,
       },
       orderBy: { issueDate: "asc" },
     });
@@ -671,16 +772,45 @@ router.get("/summary", async (req, res) => {
 
     let totalUsd = 0;
     let totalLocal = 0;
+    let approvedTotalUsd = 0;
+    let approvedTotalLocal = 0;
+    let approvedCount = 0;
+    let pipelineTotalUsd = 0;
+    let pipelineTotalLocal = 0;
+    let pipelineCount = 0;
 
     valuations.forEach((valuation) => {
       const date = valuation.issueDate instanceof Date ? valuation.issueDate : new Date(valuation.issueDate);
       const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-      const monthEntry = monthlyMap.get(key) || { usd: 0, local: 0 };
+      const monthEntry =
+        monthlyMap.get(key) ||
+        {
+          usd: 0,
+          local: 0,
+          approvedUsd: 0,
+          approvedLocal: 0,
+          pipelineUsd: 0,
+          pipelineLocal: 0,
+        };
       const totalUsdValue = decimalToNumber(valuation.totalUsd) ?? 0;
       const totalLocalValue = decimalToNumber(valuation.totalLocal) ?? 0;
+      const status = String(valuation.status ?? "DRAFT").toUpperCase();
 
       monthEntry.usd += totalUsdValue;
       monthEntry.local += totalLocalValue;
+      if (APPROVED_STATUS_SET.has(status)) {
+        monthEntry.approvedUsd += totalUsdValue;
+        monthEntry.approvedLocal += totalLocalValue;
+        approvedTotalUsd += totalUsdValue;
+        approvedTotalLocal += totalLocalValue;
+        approvedCount += 1;
+      } else if (PIPELINE_STATUS_SET.has(status)) {
+        monthEntry.pipelineUsd += totalUsdValue;
+        monthEntry.pipelineLocal += totalLocalValue;
+        pipelineTotalUsd += totalUsdValue;
+        pipelineTotalLocal += totalLocalValue;
+        pipelineCount += 1;
+      }
       monthlyMap.set(key, monthEntry);
 
       totalUsd += totalUsdValue;
@@ -707,6 +837,10 @@ router.get("/summary", async (req, res) => {
         label: `${cursor.toLocaleString("es-VE", { month: "short" })} ${String(cursor.getFullYear()).slice(-2)}`,
         totalUsd: Number(entry.usd.toFixed(2)),
         totalLocal: Number(entry.local.toFixed(2)),
+        approvedUsd: Number((entry.approvedUsd ?? 0).toFixed(2)),
+        approvedLocal: Number((entry.approvedLocal ?? 0).toFixed(2)),
+        pipelineUsd: Number((entry.pipelineUsd ?? 0).toFixed(2)),
+        pipelineLocal: Number((entry.pipelineLocal ?? 0).toFixed(2)),
       });
     }
 
@@ -723,6 +857,12 @@ router.get("/summary", async (req, res) => {
       totalUsd: Number(totalUsd.toFixed(2)),
       totalLocal: Number(totalLocal.toFixed(2)),
       totalCount: valuations.length,
+      approvedTotalUsd: Number(approvedTotalUsd.toFixed(2)),
+      approvedTotalLocal: Number(approvedTotalLocal.toFixed(2)),
+      approvedCount,
+      pipelineTotalUsd: Number(pipelineTotalUsd.toFixed(2)),
+      pipelineTotalLocal: Number(pipelineTotalLocal.toFixed(2)),
+      pipelineCount,
       monthly,
       topCustomers,
     });
@@ -850,6 +990,7 @@ router.post("/", async (req, res) => {
             totalUsd: toDecimal(item.totalUsd),
             totalLocal: toDecimal(item.totalLocal),
             orderIndex: item.orderIndex,
+            dailyBreakdown: item.dailyBreakdown ?? null,
           })),
         },
       },
@@ -931,6 +1072,7 @@ router.put("/:id", async (req, res) => {
             totalUsd: toDecimal(item.totalUsd),
             totalLocal: toDecimal(item.totalLocal),
             orderIndex: item.orderIndex,
+            dailyBreakdown: item.dailyBreakdown ?? null,
           })),
         },
       },

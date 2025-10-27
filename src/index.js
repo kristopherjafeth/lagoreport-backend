@@ -58,5 +58,5 @@ app.use(express.static(path.join(__dirname, 'build')));
 
 
 
-const port = 5000;
+const port = process.env.PORT ? Number(process.env.PORT) : 5000;
 app.listen(port, () => console.log('Server on port', port));

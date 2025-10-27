@@ -50,6 +50,8 @@ const mapTeam = (team) => ({
   description: team.description || null,
   defaultCompanySupervisorName: team.defaultCompanySupervisorName || null,
   defaultClientSupervisorName: team.defaultClientSupervisorName || null,
+  isActive: team.isActive !== false,
+  deactivatedAt: team.deactivatedAt || null,
   createdAt: team.createdAt,
   updatedAt: team.updatedAt,
   captains: Array.isArray(team.captains) ? team.captains.map(mapTeamCaptain) : [],
@@ -176,7 +178,16 @@ router.get("/dependencies", async (req, res) => {
 
 router.get("/", async (req, res) => {
   try {
+    const rawStatus = typeof req.query?.status === "string" ? req.query.status.trim().toUpperCase() : null;
+    const where = {};
+    if (rawStatus === "ACTIVE") {
+      where.isActive = true;
+    } else if (rawStatus === "INACTIVE") {
+      where.isActive = false;
+    }
+
     const teams = await prisma.team.findMany({
+      where,
       orderBy: { name: "asc" },
       include: buildTeamInclude(),
     });
@@ -412,6 +423,37 @@ router.put("/:id", async (req, res) => {
   } catch (error) {
     console.error("[teams] update error:", error);
     return res.status(400).json({ error: error.message || "No se pudo actualizar el equipo" });
+  }
+});
+
+router.patch("/:id/status", async (req, res) => {
+  const teamId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(teamId) || teamId <= 0) {
+    return res.status(400).json({ error: "Identificador de equipo inválido" });
+  }
+
+  try {
+    const { isActive } = req.body ?? {};
+    if (typeof isActive !== "boolean") {
+      return res.status(400).json({ error: "Debes indicar el estado del equipo" });
+    }
+
+    const updated = await prisma.team.update({
+      where: { id: teamId },
+      data: {
+        isActive,
+        deactivatedAt: isActive ? null : new Date(),
+      },
+      include: buildTeamInclude(),
+    });
+
+    return res.json(mapTeam(updated));
+  } catch (error) {
+    console.error("[teams] status update error:", error);
+    if (error?.code === "P2025") {
+      return res.status(404).json({ error: "Equipo no encontrado" });
+    }
+    return res.status(400).json({ error: error.message || "No se pudo actualizar el estado del equipo" });
   }
 });
 

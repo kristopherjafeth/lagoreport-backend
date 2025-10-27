@@ -142,6 +142,20 @@
         text-align: left;
       }
 
+      .items-table th.day-column,
+      .items-table td.day-column,
+      .items-table th.amount,
+      .items-table td.amount,
+      .items-table th.total-hours,
+      .items-table td.total-hours {
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      .items-table td.total-hours {
+        font-weight: 600;
+      }
+
       .items-table tfoot td {
         font-weight: 600;
         background-color: #f9fafb;
@@ -286,12 +300,27 @@
           <th>#</th>
           <th>Descripción</th>
           <th>Unidad</th>
-          <th>Cantidad</th>
-          <th>P.U. USD</th>
-          <th>Total USD</th>
-          {{#if valuation.totals.subtotalLocal}}
-            <th>P.U. Local</th>
-            <th>Total Local</th>
+          {{#each valuation.dayColumns}}
+            <th class="day-column">{{label}} (h)</th>
+          {{/each}}
+          <th class="total-hours">Total Horas</th>
+          <th class="amount">P.U. USD</th>
+          <th class="amount">Total USD</th>
+          {{#if valuation.hasLocalColumns}}
+            <th class="amount">
+              {{#if valuation.localCurrency}}
+                P.U. {{valuation.localCurrency}}
+              {{else}}
+                P.U. Local
+              {{/if}}
+            </th>
+            <th class="amount">
+              {{#if valuation.localCurrency}}
+                Total {{valuation.localCurrency}}
+              {{else}}
+                Total Local
+              {{/if}}
+            </th>
           {{/if}}
         </tr>
       </thead>
@@ -302,18 +331,21 @@
               <td>{{index}}</td>
               <td class="description">{{description}}</td>
               <td>{{unit}}</td>
-              <td>{{quantity}}</td>
-              <td>{{unitPriceUsd}}</td>
-              <td>{{totalUsd}}</td>
-              {{#if ../valuation.totals.subtotalLocal}}
-                <td>{{unitPriceLocal}}</td>
-                <td>{{totalLocal}}</td>
+              {{#each dayValues}}
+                <td class="day-column">{{value}}</td>
+              {{/each}}
+              <td class="total-hours">{{totalHours}}</td>
+              <td class="amount">{{unitPriceUsd}}</td>
+              <td class="amount">{{totalUsd}}</td>
+              {{#if ../../valuation.hasLocalColumns}}
+                <td class="amount">{{unitPriceLocal}}</td>
+                <td class="amount">{{totalLocal}}</td>
               {{/if}}
             </tr>
           {{/each}}
         {{else}}
           <tr>
-            <td colspan="{{#if valuation.totals.subtotalLocal}}8{{else}}6{{/if}}">Sin servicios registrados.</td>
+            <td colspan="{{valuation.itemsColumnCount}}">Sin servicios registrados.</td>
           </tr>
         {{/if}}
       </tbody>

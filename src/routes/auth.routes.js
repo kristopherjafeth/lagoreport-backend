@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken } from '../middleware/auth.js';
+import { generateUniqueTwoFactorCode } from '../lib/twoFactor.js';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -24,6 +25,7 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ error: 'El correo ya está registrado' });
     }
     const hash = await bcrypt.hash(password, 10);
+    const twoFactorCode = await generateUniqueTwoFactorCode(prisma);
     const user = await prisma.user.create({
       data: {
         email,
@@ -33,6 +35,7 @@ router.post('/register', async (req, res) => {
         role: {
           connect: { slug: DEFAULT_ROLE_SLUG },
         },
+        twoFactorCode,
       },
     });
     console.log('Usuario creado:', user);

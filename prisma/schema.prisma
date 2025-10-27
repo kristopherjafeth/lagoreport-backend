@@ -269,6 +269,7 @@ model ValuationItem {
   totalUsd       Decimal    @db.Decimal(14, 2)
   totalLocal     Decimal?   @db.Decimal(14, 2)
   orderIndex     Int        @default(0)
+  dailyBreakdown Json?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
   valuation      Valuation  @relation(fields: [valuationId], references: [id], onDelete: Cascade)
@@ -288,9 +289,11 @@ model Vessel {
   flag         String?
   owner        String?
   notes        String?
+  photoUrl     String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   reports      Report[]
+  documents    VesselDocument[]
 }
 
 
@@ -306,6 +309,37 @@ model Captain {
   updatedAt    DateTime  @updatedAt
   reports      Report[]
   teams        TeamCaptain[]
+  userId       Int?      @unique
+  user         User?     @relation(fields: [userId], references: [id])
+  documents    CaptainDocument[]
+}
+
+
+model CaptainDocument {
+  id         Int      @id @default(autoincrement())
+  captainId  Int
+  title      String
+  fileUrl    String
+  fileType   String?
+  fileKey    String?
+  uploadedAt DateTime @default(now())
+  captain    Captain @relation(fields: [captainId], references: [id], onDelete: Cascade)
+
+  @@index([captainId])
+}
+
+
+model VesselDocument {
+  id         Int      @id @default(autoincrement())
+  vesselId   Int
+  title      String
+  fileUrl    String
+  fileType   String?
+  fileKey    String?
+  uploadedAt DateTime @default(now())
+  vessel     Vessel  @relation(fields: [vesselId], references: [id], onDelete: Cascade)
+
+  @@index([vesselId])
 }
 
 
@@ -366,6 +400,8 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   twoFactorCodes TwoFactorCode[]
+  twoFactorCode String?  @unique @db.Char(6)
+  captain       Captain?
 }
 
 model Lamp1 {
@@ -414,6 +450,13 @@ model Report {
   status              ReportStatus @default(PENDING)
   supportImageUrl     String?
   notes               String?
+  createdByUserId     Int?
+  createdByUserFullName String?
+  createdByUserEmail  String?
+  approvedByUserId    Int?
+  approvedByUserFullName String?
+  approvedByUserEmail String?
+  approvedAt          DateTime?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   activities          ReportActivity[]
@@ -453,6 +496,8 @@ model Team {
   description                String?
   defaultCompanySupervisorName String?
   defaultClientSupervisorName  String?
+  isActive                   Boolean        @default(true)
+  deactivatedAt              DateTime?
   createdAt                  DateTime       @default(now())
   updatedAt                  DateTime       @updatedAt
   captains                   TeamCaptain[]

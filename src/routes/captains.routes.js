@@ -5,15 +5,108 @@ import path from "path";
 import fs from "fs";
 import { promises as fsPromises } from "fs";
 import crypto from "crypto";
+import bcrypt from "bcrypt";
+
+import { ensureUserTwoFactorCode, generateUniqueTwoFactorCode } from "../lib/twoFactor.js";
 
 const router = Router();
 const prisma = new PrismaClient();
+
+const SALT_ROUNDS = 10;
+const CAPTAIN_ROLE_SLUG = "captain";
+const CAPTAIN_EMAIL_DOMAIN = "captains.lagoreport.local";
+const RANDOM_PASSWORD_BYTES = 12;
 
 const uploadRoot = path.resolve(process.cwd(), "uploads", "captains");
 const photosDir = path.join(uploadRoot, "photos");
 const signaturesDir = path.join(uploadRoot, "signatures");
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+
+const normalizeCedulaForEmail = (cedula) => `${cedula ?? ""}`.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+const buildCaptainEmail = (cedula) => {
+  const normalized = normalizeCedulaForEmail(cedula);
+  if (normalized.length > 0) {
+    return `${normalized}@${CAPTAIN_EMAIL_DOMAIN}`;
+  }
+  const fallback = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+  return `captain-${fallback}@${CAPTAIN_EMAIL_DOMAIN}`;
+};
+
+const splitNameParts = (fullName) => {
+  const parts = `${fullName ?? ""}`.trim().split(/\s+/).filter(Boolean);
+  const firstName = parts.shift() ?? "Capitán";
+  const lastName = parts.length > 0 ? parts.join(" ") : "Capitán";
+  return { firstName, lastName };
+};
+
+const normalizePhone = (value) => {
+  if (!value) return null;
+  const trimmed = `${value}`.trim();
+  return trimmed.length ? trimmed : null;
+};
+
+const generateRandomPassword = () => crypto.randomBytes(RANDOM_PASSWORD_BYTES).toString("hex");
+
+const ensureCaptainRoleRecord = async (tx) => {
+  return tx.role.upsert({
+    where: { slug: CAPTAIN_ROLE_SLUG },
+    update: {},
+    create: {
+      slug: CAPTAIN_ROLE_SLUG,
+      name: "Capitán",
+      description: "Puede generar y consultar reportes operativos",
+      permissions: ["reports:create", "reports:read"],
+    },
+  });
+};
+
+const ensureCaptainUser = async (tx, existingUserId, { name, cedula, phone }) => {
+  const role = await ensureCaptainRoleRecord(tx);
+  const { firstName, lastName } = splitNameParts(name);
+  const email = buildCaptainEmail(cedula).toLowerCase();
+  const phoneNumber = normalizePhone(phone);
+
+  if (existingUserId) {
+    const updatedUser = await tx.user.update({
+      where: { id: existingUserId },
+      data: {
+        firstName,
+        lastName,
+        email,
+        phoneNumber,
+        role: {
+          connect: { slug: role.slug },
+        },
+      },
+    });
+
+    await ensureUserTwoFactorCode(tx, updatedUser.id);
+    return tx.user.findUnique({ where: { id: updatedUser.id } });
+  }
+
+  const passwordHash = await bcrypt.hash(generateRandomPassword(), SALT_ROUNDS);
+  const twoFactorCode = await generateUniqueTwoFactorCode(tx);
+
+  return tx.user.create({
+    data: {
+      firstName,
+      lastName,
+      email,
+      password: passwordHash,
+      plan: "Básico",
+      status: "active",
+      devices: 0,
+      lastLogin: new Date(),
+      phoneNumber,
+      twoFactorCode,
+      role: {
+        connect: { slug: role.slug },
+      },
+    },
+  });
+};
 
 function ensureDir(dirPath) {
   if (!fs.existsSync(dirPath)) {
@@ -124,6 +217,20 @@ const upload = multer({
   },
 });
 
+const mapCaptainDocument = (document) => ({
+  id: document.id,
+  title: document.title,
+  fileUrl: document.fileUrl,
+  fileType: document.fileType || null,
+  fileKey: document.fileKey || null,
+  uploadedAt: document.uploadedAt,
+});
+
+const parsePositiveInt = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+};
+
 const mapCaptain = (captain) => ({
   id: captain.id,
   name: captain.name,
@@ -134,12 +241,21 @@ const mapCaptain = (captain) => ({
   signatureData: captain.signatureData || null,
   createdAt: captain.createdAt,
   updatedAt: captain.updatedAt,
+  userId: captain.userId ?? null,
+  userEmail: captain.user?.email ?? null,
+  twoFactorCode: captain.user?.twoFactorCode ?? null,
+  documentsCount: captain._count?.documents ?? (Array.isArray(captain.documents) ? captain.documents.length : 0),
+  documents: Array.isArray(captain.documents) ? captain.documents.map(mapCaptainDocument) : undefined,
 });
 
 router.get("/", async (req, res) => {
   try {
     const captains = await prisma.captain.findMany({
       orderBy: { name: "asc" },
+      include: {
+        user: true,
+        _count: { select: { documents: true } },
+      },
     });
 
     res.json(captains.map(mapCaptain));
@@ -204,17 +320,29 @@ router.post("/", upload.single("photo"), async (req, res) => {
       signatureDataResponse = signatureData;
     }
 
-    const captain = await prisma.captain.create({
-      data: {
-        name,
-        cedula,
-        phone: phone || null,
-        photoUrl,
-        signatureUrl,
-      },
+    const createdCaptain = await prisma.$transaction(async (tx) => {
+      const user = await ensureCaptainUser(tx, null, { name, cedula, phone });
+      return tx.captain.create({
+        data: {
+          name,
+          cedula,
+          phone: normalizePhone(phone),
+          photoUrl,
+          signatureUrl,
+          userId: user.id,
+        },
+        include: { user: true },
+      });
     });
 
-    res.status(201).json(mapCaptain({ ...captain, signatureData: signatureDataResponse }));
+    res.status(201).json(
+      mapCaptain({
+        ...createdCaptain,
+        signatureData: signatureDataResponse,
+        documents: [],
+        _count: { documents: 0 },
+      })
+    );
   } catch (error) {
     console.error("[captains] create error:", error);
 
@@ -225,10 +353,110 @@ router.post("/", upload.single("photo"), async (req, res) => {
     tempPhotoFiles.forEach((filePath) => safeUnlink(filePath, "foto temporal"));
 
     if (error?.code === "P2002") {
-      return res.status(409).json({ error: "Ya existe un capitán registrado con esa cédula" });
+      const target = Array.isArray(error.meta?.target) ? error.meta.target.join(",") : error.meta?.target;
+      if (target && target.includes("cedula")) {
+        return res.status(409).json({ error: "Ya existe un capitán registrado con esa cédula" });
+      }
+      if (target && target.includes("email")) {
+        return res.status(409).json({ error: "Ya existe un usuario registrado con el correo generado para este capitán" });
+      }
+      if (target && target.includes("twoFactorCode")) {
+        return res.status(409).json({ error: "No se pudo asignar el código 2FA porque ya está en uso. Intenta nuevamente." });
+      }
+      return res.status(409).json({ error: "Los datos del capitán o del usuario asociado ya están registrados" });
+    }
+
+    if (error instanceof Error && error.message.includes("código de verificación")) {
+      return res.status(500).json({ error: error.message });
     }
 
     return res.status(400).json({ error: error.message || "No se pudo crear el capitán" });
+  }
+});
+
+router.get("/:id/documents", async (req, res) => {
+  const captainId = parsePositiveInt(req.params.id);
+  if (!captainId) {
+    return res.status(400).json({ error: "Identificador inválido" });
+  }
+
+  try {
+    const documents = await prisma.captainDocument.findMany({
+      where: { captainId },
+      orderBy: { uploadedAt: "desc" },
+    });
+    return res.json(documents.map(mapCaptainDocument));
+  } catch (error) {
+    console.error("[captains] list documents error:", error);
+    return res.status(500).json({ error: "No se pudieron obtener los documentos del capitán" });
+  }
+});
+
+router.post("/:id/documents", async (req, res) => {
+  const captainId = parsePositiveInt(req.params.id);
+  if (!captainId) {
+    return res.status(400).json({ error: "Identificador inválido" });
+  }
+
+  try {
+    const captain = await prisma.captain.findUnique({ where: { id: captainId }, select: { id: true } });
+    if (!captain) {
+      return res.status(404).json({ error: "Capitán no encontrado" });
+    }
+
+    const title = `${req.body?.title ?? ""}`.trim();
+    const fileUrl = `${req.body?.fileUrl ?? ""}`.trim();
+    const fileTypeRaw = req.body?.fileType;
+    const fileKeyRaw = req.body?.fileKey;
+
+    if (!title) {
+      throw new Error("El nombre del documento es obligatorio");
+    }
+
+    if (!fileUrl) {
+      throw new Error("La URL del documento es obligatoria");
+    }
+
+    const document = await prisma.captainDocument.create({
+      data: {
+        captainId,
+        title,
+        fileUrl,
+        fileType: typeof fileTypeRaw === "string" ? fileTypeRaw.trim() || null : null,
+        fileKey: typeof fileKeyRaw === "string" ? fileKeyRaw.trim() || null : null,
+      },
+    });
+
+    return res.status(201).json(mapCaptainDocument(document));
+  } catch (error) {
+    console.error("[captains] create document error:", error);
+    return res.status(400).json({ error: error?.message || "No se pudo registrar el documento" });
+  }
+});
+
+router.delete("/:id/documents/:documentId", async (req, res) => {
+  const captainId = parsePositiveInt(req.params.id);
+  const documentId = parsePositiveInt(req.params.documentId);
+
+  if (!captainId || !documentId) {
+    return res.status(400).json({ error: "Identificadores inválidos" });
+  }
+
+  try {
+    const document = await prisma.captainDocument.findFirst({
+      where: { id: documentId, captainId },
+    });
+
+    if (!document) {
+      return res.status(404).json({ error: "Documento no encontrado" });
+    }
+
+    await prisma.captainDocument.delete({ where: { id: document.id } });
+
+    return res.status(204).send();
+  } catch (error) {
+    console.error("[captains] delete document error:", error);
+    return res.status(500).json({ error: "No se pudo eliminar el documento" });
   }
 });
 
@@ -239,7 +467,16 @@ router.get("/:id", async (req, res) => {
   }
 
   try {
-    const captain = await prisma.captain.findUnique({ where: { id } });
+    const captain = await prisma.captain.findUnique({
+      where: { id },
+      include: {
+        user: true,
+        documents: {
+          orderBy: { uploadedAt: "desc" },
+        },
+        _count: { select: { documents: true } },
+      },
+    });
     if (!captain) {
       return res.status(404).json({ error: "Capitán no encontrado" });
     }
@@ -360,15 +597,26 @@ router.put("/:id", upload.single("photo"), async (req, res) => {
       signatureDataResponse = normalizedSignatureData;
     }
 
-    const updatedCaptain = await prisma.captain.update({
-      where: { id },
-      data: {
-        name,
-        cedula,
-        phone: phone || null,
-        photoUrl,
-        signatureUrl,
-      },
+    const updatedCaptain = await prisma.$transaction(async (tx) => {
+      const user = await ensureCaptainUser(tx, existing.userId, { name, cedula, phone });
+      return tx.captain.update({
+        where: { id },
+        data: {
+          name,
+          cedula,
+          phone: normalizePhone(phone),
+          photoUrl,
+          signatureUrl,
+          userId: existing.userId ?? user.id,
+        },
+        include: {
+          user: true,
+          documents: {
+            orderBy: { uploadedAt: "desc" },
+          },
+          _count: { select: { documents: true } },
+        },
+      });
     });
 
     photosToDeleteAfterSuccess.forEach((publicPath) => deleteLocalPhoto(publicPath));
@@ -391,7 +639,21 @@ router.put("/:id", upload.single("photo"), async (req, res) => {
     tempPhotoFiles.forEach((filePath) => safeUnlink(filePath, "foto temporal"));
 
     if (error?.code === "P2002") {
-      return res.status(409).json({ error: "Ya existe un capitán registrado con esa cédula" });
+      const target = Array.isArray(error.meta?.target) ? error.meta.target.join(",") : error.meta?.target;
+      if (target && target.includes("cedula")) {
+        return res.status(409).json({ error: "Ya existe un capitán registrado con esa cédula" });
+      }
+      if (target && target.includes("email")) {
+        return res.status(409).json({ error: "Ya existe un usuario registrado con el correo generado para este capitán" });
+      }
+      if (target && target.includes("twoFactorCode")) {
+        return res.status(409).json({ error: "No se pudo asignar el código 2FA porque ya está en uso. Intenta nuevamente." });
+      }
+      return res.status(409).json({ error: "Los datos del capitán o del usuario asociado ya están registrados" });
+    }
+
+    if (error instanceof Error && error.message.includes("código de verificación")) {
+      return res.status(500).json({ error: error.message });
     }
 
     return res.status(400).json({ error: error.message || "No se pudo actualizar el capitán" });

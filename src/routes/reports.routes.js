@@ -8,6 +8,8 @@ import crypto from "crypto";
 import Handlebars from "handlebars";
 import puppeteer from "puppeteer";
 
+import { buildTwoFactorError, findUserByTwoFactorCode, isValidStaticCode } from "../lib/twoFactor.js";
+
 const router = Router();
 const prisma = new PrismaClient();
 
@@ -55,6 +57,48 @@ const upload = multer({
 
 const PUBLIC_UPLOAD_PREFIX = "/uploads/report-activities";
 
+const STATIC_CODE_HEADER_KEYS = ["x-two-factor-code", "x-user-code"]; // allow legacy header names
+
+const extractStaticCodeFromRequest = (req) => {
+  for (const headerKey of STATIC_CODE_HEADER_KEYS) {
+    const headerValue = req.headers?.[headerKey];
+    if (typeof headerValue === "string" && headerValue.trim()) {
+      return headerValue.trim();
+    }
+  }
+
+  const bodyValue = req.body?.twoFactorCode ?? req.body?.userCode ?? null;
+  if (typeof bodyValue === "string" && bodyValue.trim()) {
+    return bodyValue.trim();
+  }
+
+  // when payload is JSON-encoded inside "data", try to parse minimal info without mutating original parsing flow
+  if (typeof req.body?.data === "string") {
+    try {
+      const parsed = JSON.parse(req.body.data);
+      const nested = parsed?.twoFactorCode ?? parsed?.userCode;
+      if (typeof nested === "string" && nested.trim()) {
+        return nested.trim();
+      }
+    } catch (error) {
+      // ignore parsing errors here; the main payload parser will surface issues later if needed
+    }
+  }
+
+  return null;
+};
+
+const ensureStaticCodeUser = async (req) => {
+  const code = extractStaticCodeFromRequest(req);
+  if (!isValidStaticCode(code ?? "")) {
+    throw buildTwoFactorError("Debes ingresar tu código de 6 dígitos para continuar", 400);
+  }
+
+  const user = await findUserByTwoFactorCode(prisma, code);
+  req.twoFactorUser = user;
+  return user;
+};
+
 const parseDate = (value, fieldName) => {
   if (!value) {
     throw new Error(`${fieldName} es requerido`);
@@ -92,6 +136,35 @@ const normalizeString = (value, fallback = "") => {
   if (value === undefined || value === null) return fallback;
   const text = `${value}`.trim();
   return text.length ? text : fallback;
+};
+
+const buildTwoFactorUserMetadata = (user) => {
+  if (!user || typeof user !== "object") {
+    return { id: null, fullName: null, email: null };
+  }
+
+  const parts = [user.firstName, user.lastName]
+    .map((part) => (typeof part === "string" ? part.trim() : ""))
+    .filter((part) => part.length > 0);
+
+  let fullName = parts.join(" ");
+  if (!fullName.length) {
+    if (typeof user.email === "string" && user.email.trim().length) {
+      fullName = user.email.trim();
+    } else if (typeof user.name === "string" && user.name.trim().length) {
+      fullName = user.name.trim();
+    } else {
+      fullName = null;
+    }
+  }
+
+  const email = typeof user.email === "string" && user.email.trim().length ? user.email.trim() : null;
+
+  return {
+    id: typeof user.id === "number" ? user.id : null,
+    fullName,
+    email,
+  };
 };
 
 const parseOptionalCoordinate = (value, fieldName, min, max) => {
@@ -674,6 +747,8 @@ const mapTeamSummary = (team) => {
     description: team.description || null,
     defaultCompanySupervisorName: team.defaultCompanySupervisorName || null,
     defaultClientSupervisorName: team.defaultClientSupervisorName || null,
+    isActive: team.isActive !== false,
+    deactivatedAt: team.deactivatedAt || null,
     createdAt: team.createdAt,
     updatedAt: team.updatedAt,
     captains: Array.isArray(team.captains) ? team.captains.map(mapTeamCaptainAssignment) : [],
@@ -778,6 +853,13 @@ const mapReport = (report) => ({
   totalServiceMinutes: report.totalServiceMinutes,
   createdAt: report.createdAt,
   updatedAt: report.updatedAt,
+  createdByUserId: report.createdByUserId || null,
+  createdByUserFullName: report.createdByUserFullName || null,
+  createdByUserEmail: report.createdByUserEmail || null,
+  approvedByUserId: report.approvedByUserId ?? null,
+  approvedByUserFullName: report.approvedByUserFullName || null,
+  approvedByUserEmail: report.approvedByUserEmail || null,
+  approvedAt: report.approvedAt ?? null,
   captain: mapPerson(report.captain),
   customer: mapPerson(report.customer),
   vessel: mapVesselRecord(report.vessel),
@@ -804,6 +886,96 @@ const parseDateRange = (startDate, endDate) => {
 
   return { start, end };
 };
+
+router.get("/metrics", async (req, res) => {
+  try {
+    const { startDate, endDate, vessel, client } = req.query ?? {};
+    const { start, end } = parseDateRange(startDate, endDate);
+
+    const reportWhere = {};
+    if (vessel) {
+      reportWhere.vesselName = { contains: `${vessel}`.trim(), mode: "insensitive" };
+    }
+    if (client) {
+      reportWhere.clientName = { contains: `${client}`.trim(), mode: "insensitive" };
+    }
+    if (start || end) {
+      reportWhere.serviceDate = {};
+      if (start) reportWhere.serviceDate.gte = start;
+      if (end) reportWhere.serviceDate.lte = end;
+    }
+
+    const [reports, activeTeams, vessels, captains, mariners] = await Promise.all([
+      prisma.report.findMany({
+        where: reportWhere,
+        select: {
+          id: true,
+          serviceDate: true,
+          totalServiceMinutes: true,
+          activities: {
+            select: { startedAt: true, endedAt: true },
+          },
+        },
+        orderBy: { serviceDate: "asc" },
+      }),
+      prisma.team.count({ where: { isActive: true } }),
+      prisma.vessel.count(),
+      prisma.captain.count(),
+      prisma.mariner.count(),
+    ]);
+
+    const groupedByDate = new Map();
+
+    reports.forEach((report) => {
+      const serviceDate = report.serviceDate instanceof Date ? report.serviceDate : new Date(report.serviceDate);
+      if (Number.isNaN(serviceDate.getTime())) {
+        return;
+      }
+      const dateKey = serviceDate.toISOString().slice(0, 10);
+      if (!groupedByDate.has(dateKey)) {
+        groupedByDate.set(dateKey, { reports: 0, minutes: 0 });
+      }
+      const bucket = groupedByDate.get(dateKey);
+      bucket.reports += 1;
+      const minutes = Math.max(
+        report.totalServiceMinutes && report.totalServiceMinutes > 0
+          ? report.totalServiceMinutes
+          : (report.activities || []).reduce(
+              (acc, activity) => acc + minutesBetween(activity.startedAt, activity.endedAt),
+              0,
+            ),
+        0,
+      );
+      bucket.minutes += minutes;
+    });
+
+    const daily = Array.from(groupedByDate.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, value]) => ({
+        date,
+        totalReports: value.reports,
+        totalMinutes: value.minutes,
+      }));
+
+    res.json({
+      range: {
+        start: start ? start.toISOString() : null,
+        end: end ? end.toISOString() : null,
+      },
+      totals: {
+        reports: reports.length,
+        activeTeams,
+        vessels,
+        captains,
+        mariners,
+      },
+      daily,
+    });
+  } catch (error) {
+    console.error("[reports] metrics error:", error);
+    res.status(500).json({ error: "No se pudieron obtener las métricas del dashboard" });
+  }
+});
 
 router.get("/summary", async (req, res) => {
   try {
@@ -1077,6 +1249,9 @@ router.post("/:id/approve", async (req, res) => {
   }
 
   try {
+    const approvalUser = await ensureStaticCodeUser(req);
+    const approvalMetadata = buildTwoFactorUserMetadata(approvalUser);
+
     const existing = await prisma.report.findUnique({
       where: { id: reportId },
       include: {
@@ -1097,12 +1272,41 @@ router.post("/:id/approve", async (req, res) => {
     }
 
     if (existing.status === "APPROVED") {
+      if (!existing.approvedByUserId && (approvalMetadata.id || approvalMetadata.fullName || approvalMetadata.email)) {
+        const refreshed = await prisma.report.update({
+          where: { id: reportId },
+          data: {
+            approvedByUserId: approvalMetadata.id,
+            approvedByUserFullName: approvalMetadata.fullName,
+            approvedByUserEmail: approvalMetadata.email,
+            approvedAt: existing.approvedAt ?? new Date(),
+          },
+          include: {
+            activities: {
+              orderBy: { startedAt: "asc" },
+            },
+            captain: true,
+            customer: true,
+            vessel: true,
+            team: {
+              include: buildTeamInclude(),
+            },
+          },
+        });
+        return res.json(mapReport(refreshed));
+      }
       return res.json(mapReport(existing));
     }
 
     const updated = await prisma.report.update({
       where: { id: reportId },
-      data: { status: "APPROVED" },
+      data: {
+        status: "APPROVED",
+        approvedByUserId: approvalMetadata.id,
+        approvedByUserFullName: approvalMetadata.fullName,
+        approvedByUserEmail: approvalMetadata.email,
+        approvedAt: new Date(),
+      },
       include: {
         activities: {
           orderBy: { startedAt: "asc" },
@@ -1118,6 +1322,9 @@ router.post("/:id/approve", async (req, res) => {
 
     return res.json(mapReport(updated));
   } catch (error) {
+    if (error?.name === "TwoFactorValidationError" && typeof error.statusCode === "number") {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     console.error("[reports] approve error:", error);
     return res.status(500).json({ error: "No se pudo aprobar el reporte" });
   }
@@ -1162,6 +1369,8 @@ router.post("/", upload.any(), async (req, res) => {
     : [];
 
   try {
+    const authorizedUser = await ensureStaticCodeUser(req);
+    const authorizedMetadata = buildTwoFactorUserMetadata(authorizedUser);
     const payload = parseReportPayload(req.body?.data ?? req.body);
     const fileMap = buildFileMap(req.files);
 
@@ -1309,6 +1518,9 @@ router.post("/", upload.any(), async (req, res) => {
         status: payload.status,
         supportImageUrl,
         teamId: resolvedTeamId,
+        createdByUserId: authorizedMetadata.id,
+        createdByUserFullName: authorizedMetadata.fullName,
+        createdByUserEmail: authorizedMetadata.email,
         activities: {
           create: activitiesData,
         },
@@ -1329,6 +1541,9 @@ router.post("/", upload.any(), async (req, res) => {
     return res.status(201).json(mapReport(report));
   } catch (error) {
     cleanupUploadedFiles(uploadedFiles);
+    if (error?.name === "TwoFactorValidationError" && typeof error.statusCode === "number") {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     console.error("[reports] create error:", error);
     return res.status(400).json({ error: error.message || "No se pudo crear el reporte" });
   }

@@ -3,6 +3,14 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 
+import {
+  buildTwoFactorError,
+  ensureUserTwoFactorCode,
+  findUserByTwoFactorCode,
+  generateUniqueTwoFactorCode,
+  isValidStaticCode,
+} from "../lib/twoFactor.js";
+
 const router = Router();
 const prisma = new PrismaClient();
 const SALT_ROUNDS = 10;
@@ -65,6 +73,7 @@ const mapUser = (user) => ({
   updatedAt: user.updatedAt,
   avatar: user.avatarUrl ?? null,
   phoneNumber: user.phoneNumber ?? null,
+  twoFactorCode: user.twoFactorCode ?? null,
 });
 
 const parseDevices = (value, fallback = 0) => {
@@ -128,11 +137,20 @@ router.get("/", async (req, res) => {
       where.status = normalizeStatus(status);
     }
 
-    const users = await prisma.user.findMany({
+    const rawUsers = await prisma.user.findMany({
       where,
       orderBy: { createdAt: "desc" },
       include: { role: true },
     });
+    const users = [];
+    for (const user of rawUsers) {
+      if (!user.twoFactorCode) {
+        const twoFactorCode = await ensureUserTwoFactorCode(prisma, user.id);
+        users.push({ ...user, twoFactorCode });
+      } else {
+        users.push(user);
+      }
+    }
 
     res.json(users.map(mapUser));
   } catch (error) {
@@ -148,9 +166,13 @@ router.get("/:id", async (req, res) => {
   }
 
   try {
-  const user = await prisma.user.findUnique({ where: { id: userId }, include: { role: true } });
+  let user = await prisma.user.findUnique({ where: { id: userId }, include: { role: true } });
     if (!user) {
       return res.status(404).json({ error: "User not found" });
+    }
+    if (!user.twoFactorCode) {
+      const twoFactorCode = await ensureUserTwoFactorCode(prisma, user.id);
+      user = { ...user, twoFactorCode };
     }
 
     res.json(mapUser(user));
@@ -215,6 +237,8 @@ router.post("/", async (req, res) => {
       return res.status(statusCode).json({ error: roleError.message });
     }
 
+    const twoFactorCode = await generateUniqueTwoFactorCode(prisma);
+
     const newUser = await prisma.user.create({
       data: {
         firstName: `${firstName}`.trim(),
@@ -227,6 +251,7 @@ router.post("/", async (req, res) => {
         lastLogin: lastLoginDate,
         avatarUrl: avatar ? `${avatar}`.trim() : null,
         phoneNumber: phoneNumber ? `${phoneNumber}`.trim() || null : null,
+        twoFactorCode,
         role: {
           connect: { slug: roleRecord.slug },
         },
@@ -349,7 +374,11 @@ router.put("/:id", async (req, res) => {
       data.phoneNumber = normalizedPhone.length ? normalizedPhone : null;
     }
 
-  const updated = await prisma.user.update({ where: { id: userId }, data, include: { role: true } });
+  let updated = await prisma.user.update({ where: { id: userId }, data, include: { role: true } });
+    if (!updated.twoFactorCode) {
+      const twoFactorCode = await ensureUserTwoFactorCode(prisma, userId);
+      updated = { ...updated, twoFactorCode };
+    }
     res.json(mapUser(updated));
   } catch (error) {
     console.error("Error updating user:", error);
@@ -372,6 +401,34 @@ router.delete("/:id", async (req, res) => {
     }
     console.error("Error deleting user:", error);
     res.status(500).json({ error: "Unable to delete user" });
+  }
+});
+
+router.post("/verify-code", async (req, res) => {
+  try {
+    const { code } = req.body ?? {};
+    if (!isValidStaticCode(code ?? "")) {
+      const error = buildTwoFactorError("Debes ingresar un código de 6 dígitos", 400);
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+
+    const user = await findUserByTwoFactorCode(prisma, code);
+    return res.json({
+      user: {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        fullName: `${user.firstName} ${user.lastName}`.trim(),
+        email: user.email,
+        twoFactorCode: user.twoFactorCode,
+      },
+    });
+  } catch (error) {
+    if (error?.name === "TwoFactorValidationError" && typeof error.statusCode === "number") {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    console.error("Error verifying user code:", error);
+    return res.status(500).json({ error: "No se pudo validar el código" });
   }
 });
 

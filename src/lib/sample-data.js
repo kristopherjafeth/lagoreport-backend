@@ -21,6 +21,12 @@ const SAMPLE_ROLES = [
     name: "Operador",
     description: "Puede consultar reportes y métricas",
     permissions: ["reports:read", "greenhouses:read"]
+  },
+  {
+    slug: "captain",
+    name: "Capitán",
+    description: "Puede generar y consultar reportes operativos",
+    permissions: ["reports:create", "reports:read"]
   }
 ];
 
