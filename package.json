@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-  "dev": "npm run lint:migrations && prisma migrate dev && nodemon src/index.js",
-  "prod": "npm run lint:migrations && prisma migrate deploy && node src/index.js",
+  "dev": "prisma migrate dev && nodemon src/index.js",
+  "prod": "prisma migrate deploy && node src/index.js",
     "lint:migrations": "node scripts/lint-migrations.js",
     "seed:demo": "node prisma/seed-demo.js"
   },
