@@ -103,6 +103,25 @@ const parseDate = (value, fieldName) => {
   if (!value) {
     throw new Error(`${fieldName} es requerido`);
   }
+
+  if (typeof value === "string") {
+    const dateOnlyMatch = value.trim().match(/^\s*(\d{4})-(\d{2})-(\d{2})\s*$/);
+    if (dateOnlyMatch) {
+      const [, year, month, day] = dateOnlyMatch;
+      const numericYear = Number.parseInt(year, 10);
+      const numericMonth = Number.parseInt(month, 10) - 1;
+      const numericDay = Number.parseInt(day, 10);
+      if (
+        Number.isNaN(numericYear) ||
+        Number.isNaN(numericMonth) ||
+        Number.isNaN(numericDay)
+      ) {
+        throw new Error(`${fieldName} no es una fecha válida`);
+      }
+      return new Date(Date.UTC(numericYear, numericMonth, numericDay));
+    }
+  }
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     throw new Error(`${fieldName} no es una fecha válida`);
@@ -114,16 +133,39 @@ const combineDateAndTime = (baseDate, time, fieldName) => {
   if (!time || typeof time !== "string") {
     throw new Error(`${fieldName} es requerido`);
   }
-  const [hours = "0", minutes = "0"] = time.split(":");
-  const cloned = new Date(baseDate);
-  cloned.setHours(Number.parseInt(hours, 10) || 0, Number.parseInt(minutes, 10) || 0, 0, 0);
-  return cloned;
+  if (!(baseDate instanceof Date) || Number.isNaN(baseDate.getTime())) {
+    throw new Error(`${fieldName} no cuenta con una fecha base válida`);
+  }
+
+  const trimmed = time.trim();
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) {
+    throw new Error(`${fieldName} debe tener el formato HH:MM`);
+  }
+
+  const hours = Number.parseInt(match[1], 10);
+  const minutes = Number.parseInt(match[2], 10);
+  if (
+    Number.isNaN(hours) ||
+    Number.isNaN(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    throw new Error(`${fieldName} debe ser una hora válida`);
+  }
+
+  const year = baseDate.getUTCFullYear();
+  const month = baseDate.getUTCMonth();
+  const day = baseDate.getUTCDate();
+  return new Date(Date.UTC(year, month, day, hours, minutes, 0, 0));
 };
 
 const normalizeEndDate = (start, end) => {
   const normalized = new Date(end);
   while (normalized <= start) {
-    normalized.setDate(normalized.getDate() + 1);
+    normalized.setUTCDate(normalized.getUTCDate() + 1);
   }
   return normalized;
 };
@@ -640,8 +682,13 @@ const parseReportPayload = (rawPayload) => {
   const longitude = parseOptionalLongitude(payload.longitude, "longitude");
 
   const serviceDate = parseDate(payload.serviceDate, "serviceDate");
-  const normalizedServiceDate = new Date(serviceDate);
-  normalizedServiceDate.setHours(0, 0, 0, 0);
+  const normalizedServiceDate = new Date(
+    Date.UTC(
+      serviceDate.getUTCFullYear(),
+      serviceDate.getUTCMonth(),
+      serviceDate.getUTCDate(),
+    ),
+  );
 
   const serviceStart = combineDateAndTime(normalizedServiceDate, normalizeString(payload.serviceStartTime), "serviceStartTime");
   const rawServiceEnd = combineDateAndTime(normalizedServiceDate, normalizeString(payload.serviceEndTime), "serviceEndTime");
