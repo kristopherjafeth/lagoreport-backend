@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-  "dev": "prisma migrate dev && nodemon src/index.js",
-  "prod": "prisma migrate deploy && node src/index.js",
-    "lint:migrations": "node scripts/lint-migrations.js",
-    "seed:demo": "node prisma/seed-demo.js"
+    "dev": "prisma migrate dev && nodemon src/index.js",
+    "prod": "prisma migrate deploy && node src/index.js",
+    "seed:demo": "node scripts/seed-demo.js",
+    "lint:migrations": "node scripts/lint-migrations.js"
   },
   "keywords": [],
   "author": "",
@@ -30,8 +30,5 @@
     "nodemailer": "^7.0.6",
     "handlebars": "^4.7.8",
     "puppeteer": "^22.12.1"
-  },
-  "prisma": {
-    "seed": "node prisma/seed-demo.js"
   }
 }
