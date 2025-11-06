@@ -1,0 +1,2 @@
+-- Intentionally left blank.
+-- This placeholder migration ensures Prisma history remains consistent.
